@@ -340,6 +340,17 @@ class BaseAnalogSignal(BaseNeo, pq.Quantity):
         new.annotations.update(self.annotations)
         return new
 
+    def duplicate_with_new_array_units(self, signal, units=None):
+        if units is None:
+            new = self.__class__(signal=signal, units=self.units,
+                                 sampling_rate=self.sampling_rate)
+        else:
+            new = self.__class__(signal=signal, units=units,
+                                 sampling_rate=self.sampling_rate)
+        new._copy_data_complement(self)
+        new.annotations.update(self.annotations)
+        return new
+
     def __eq__(self, other):
         '''
         Equality test (==)

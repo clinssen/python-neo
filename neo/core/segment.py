@@ -140,8 +140,12 @@ class Segment(Container):
         channel_indexes = []
         for unit in unit_list:
             if unit.channel_indexes is not None:
-                channel_indexes.extend(unit.channel_indexes)
+                # channel_indexes.extend(unit.channel_indexes)
+                channel_indexes.append(unit.channel_indexes)
         return self.take_analogsignal_by_channelindex(channel_indexes)
+
+    def _get_analogsignal(self):
+        return self.analogsignals
 
     def take_analogsignal_by_channelindex(self, channel_indexes=None):
         '''
@@ -151,6 +155,7 @@ class Segment(Container):
         '''
         if channel_indexes is None:
             return []
+
         anasig_list = []
         for anasig in self.analogsignals:
             if anasig.channel_index in channel_indexes:
@@ -168,7 +173,8 @@ class Segment(Container):
         indexes = []
         for unit in unit_list:
             if unit.channel_indexes is not None:
-                indexes.extend(unit.channel_indexes)
+                # indexes.extend(unit.channel_indexes)
+                indexes.append(unit.channel_indexes)
 
         return self.take_slice_of_analogsignalarray_by_channelindex(indexes)
 
@@ -200,14 +206,14 @@ class Segment(Container):
         *Example*::
 
             >>> from neo.core import (Segment, Block, Unit, SpikeTrain,
-            ...                       RecordingChannelGroup)
+            ...                       RecordingChannelGroup, AnalogSignal)
             >>>
             >>> blk = Block()
             >>> rcg = RecordingChannelGroup(name='group0')
             >>> blk.recordingchannelgroups = [rcg]
             >>>
             >>> for ind in range(5):
-            ...         unit = Unit(name='Unit #%s' % ind, channel_index=ind)
+            ...         unit = Unit(name='Unit #%s' % ind, channel_indexes=ind)
             ...         rcg.units.append(unit)
             ...
             >>>
@@ -220,6 +226,10 @@ class Segment(Container):
             ...         train.unit = unit
             ...         unit.spiketrains.append(train)
             ...         seg.spiketrains.append(train)
+            ...         ana = AnalogSignal(signal=[.01, 3.3, 9.3], units='uV',
+                                           sampling_rate=1*pq.Hz,
+                                           channel_index=1)
+            ...         seg.analogsignals.append(ana)
             ...
             >>>
             >>> seg0 = blk.segments[-1]
@@ -228,6 +238,10 @@ class Segment(Container):
             5
             >>> len(seg1.spiketrains)
             2
+            >>> len(seg0.analogsignals)
+            5
+            >>> len(seg1.analogsignals)
+            0 (ERROR: should be >0). Reason: Channel_indexes = None is passed.
 
         '''
         seg = Segment()

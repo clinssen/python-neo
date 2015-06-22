@@ -11,6 +11,8 @@ defined in :module:`neo.core.analogsignalarray`.
 from __future__ import absolute_import, division, print_function
 
 from neo.core.baseneo import BaseNeo
+# from neo.core import AnalogSignal
+import numpy as np
 
 
 def unique_objs(objs):
@@ -21,6 +23,143 @@ def unique_objs(objs):
     seen = set()
     return [obj for obj in objs
             if id(obj) not in seen and not seen.add(id(obj))]
+
+
+# def _check_object_instance2(objects):
+#     x = objects
+#     if x == 'block':
+#         obj = ['Block']
+#     elif x == 'recordingchannelgroup':
+#         obj = ['RecordingChannelGroup']
+#     elif x == 'recordingchannel':
+#         obj = ['RecordingChannel']
+#     elif x == 'unit':
+#         obj = ['Unit']
+#     elif x == 'segment':
+#         obj = ['Segment']
+#     elif x == 'analogsignal':
+#         obj = ['AnalogSignal']
+#     elif x == 'spiketrain':
+#         obj = ['SpikeTrain']
+#     elif x == 'event':
+#         obj = ['Event']
+#     elif x == 'eventarray':
+#         obj = ['EventArray']
+#     elif x == 'epoch':
+#         obj = ['Epoch']
+#     elif x == 'epocharray':
+#         obj = ['EpochArray']
+#     elif x == 'irregularsampledsignal':
+#         obj = ['IrregularlySampledSignal']
+#     return obj
+
+
+def _check_object_instance(objects):
+    list_dict_type = {'block': ['Block'],
+                      'recordingchannelgroup': ['RecordingChannelGroup'],
+                      'recordingchannel': ['RecordingChannel'],
+                      'unit': ['Unit'], 'segment': ['Segment'],
+                      'analogsignal': ['AnalogSignal'], 'spike': ['Spike'],
+                      'spiketrain': ['SpikeTrain'], 'event': ['Event'],
+                      'eventarray': ['EventArray'], 'epoch': ['Epoch'],
+                      'epocharray': ['EpochArray'],
+                      'irregularlysampledsignal': ['IrregularlySampledSignal']}
+
+    if objects in list_dict_type.keys():
+    # if list_dict_type.has_key(objects) does NOT work
+        obj = list_dict_type.get(objects)
+        # print (obj)
+    return obj
+
+
+def filterdata_new(data, targdict=None, objects=None, **kwargs):
+    """
+    Return a list of the objects in data matching *any* of the search terms
+    in either their attributes or annotations.  Search terms can be
+    provided as keyword arguments or a dictionary, either as a positional
+    argument after data or to the argument targdict.  targdict can also
+    be a list of dictionaries, in which case the filters are applied
+    sequentially.  If targdict and kwargs are both supplied, the
+    targdict filters are applied first, followed by the kwarg filters.
+
+
+    objects (optional) should be the name of a Neo object type,
+    a neo object class, or a list of one or both of these.  If specified,
+    only these objects will be returned.
+    """
+    # print ("-------------------------------> ")
+
+    # if objects are specified, get the classes
+    list_type = ['block', 'recordingchannelgroup', 'recordingchannel', 'unit',
+                 'segment', 'analogsignal', 'spike', 'spiketrain', 'event',
+                 'eventarray', 'epoch', 'epocharray',
+                 'irregularlysampledsignal']
+
+    if objects:
+        if (isinstance(objects, str) and objects.lower() in list_type):
+            # print ("INSIDE STRING")
+            objects = _check_object_instance(objects.lower())
+        elif hasattr(objects, 'lower') or isinstance(objects, type):
+            # print ("INSIDE ISINSTANCE")
+            objects = [objects]
+    elif objects is not None:
+        import warnings
+        warnings.warn("WARNING: type of objects is unidentified")
+        return []
+
+    # handle cases with targdict
+    if targdict is None:
+        targdict = kwargs
+    elif not kwargs:
+        pass
+    elif hasattr(targdict, 'keys'):
+        targdict = [targdict, kwargs]
+    else:
+        targdict += [kwargs]
+
+    results = []
+    if not targdict or targdict is None:
+        if objects:
+            for i in range(len(data)):
+                if isinstance(objects[0], str) and str(objects[0]) in str(type(data[i])):
+                    results.append(data[i])
+                elif not isinstance(objects[0], str) and np.any([isinstance(data[i], j) for j in objects]):
+                    results.append(data[i])
+                # else:
+                #    print ("NOTHINGS MATCHED")
+            return results
+        else:
+            return []
+
+    # if multiple dicts are provided, apply each filter sequentially
+    if not hasattr(targdict, 'keys'):
+        # for performance reasons, only do the object filtering on the first
+        # iteration
+        # TODO: here regarding issue 11
+        results = filterdata_new(data, targdict=targdict[0], objects=objects)
+        for targ in targdict[1:]:
+            results = filterdata_new(results, targdict=targ)
+        # x = "targdict is empty"
+        return results
+
+    # do the actual filtering
+    results = []
+    for key, value in sorted(targdict.items()):
+        for obj in data:
+            if (hasattr(obj, key) and getattr(obj, key) == value and
+                    all([obj is not res for res in results])):
+                results.append(obj)
+            elif (key in obj.annotations and obj.annotations[key] == value and
+                    all([obj is not res for res in results])):
+                results.append(obj)
+
+    # keep only objects of the correct classes
+    if objects:
+        results = [result for result in results if
+                   result.__class__ in objects or
+                   result.__class__.__name__ in objects]
+
+    return results
 
 
 def filterdata(data, targdict=None, objects=None, **kwargs):
@@ -397,6 +536,7 @@ class Container(BaseNeo):
 
             >>> obj.filter(name="Vm")
         """
+
         # if objects are specified, get the classes
         if objects:
             data = True
@@ -415,8 +555,17 @@ class Container(BaseNeo):
             else:
                 children.extend(self.container_children)
 
-        return filterdata(children, objects=objects,
-                          targdict=targdict, **kwargs)
+        results = []
+        if isinstance(objects, list) and len(objects) > 0:
+            for i in range(len(objects)):
+                obj_pop = objects.pop()
+                result = filterdata_new(children, objects=obj_pop,
+                                        targdict=targdict, **kwargs)
+                results.append(result)
+        else:
+            results = filterdata_new(children, objects=objects,
+                                     targdict=targdict, **kwargs)
+        return results
 
     def list_children_by_class(self, cls):
         """
