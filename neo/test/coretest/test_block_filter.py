@@ -48,44 +48,61 @@ blk.segments[2].spiketrains[2].annotate(unit_id=1)
 print "Block segments annotate st22 electrode_id=7 "
 blk.segments[2].spiketrains[2].annotate(electrode_id=7)
 
-# print "Block filter name=Simulation ", blk.filter(name="Simulation #2", container=True)
-# print
-# print "Block filter a=5 and objects=['AnalogSignal'] ", blk.filter(a=5, \
-#                                                                 objects=['AnalogSignal'])
-# print
-# print "Block filter a=5 and objects=AnalogSignal ", blk.filter(a=5, \
-#                                                                objects=AnalogSignal)
-# print
-# print "Block filter a=5 and objects='ANALOGSiGnal' ", blk.filter(a=5, \
-#                                                                  objects='ANALOgSiGnal')
-# print
-# print "Block filter a=5 and objects='AnalogSignal' ", blk.filter(a=5, \
-#                                                                  objects='AnalogSignal')
-# print
-# print "Block filter a=5 and objects='analogsignal' ", blk.filter(a=5, \
-#                                                                  objects='analogsignal')
-# print
-# print "Unidentified object ", blk.filter(a=5, objects='asdasfasfa')
-# print
-# print "Block size = ", blk.size
-# print
-# print "Block filter st=8 and objects='SpikeTrain' ", blk.filter(st=8,
-#                                                                 objects='SpikeTrain')
-# print
-# print "targdict is None and objects='AnalogSignal' ", blk.filter(objects='AnalogSIGnal')
-# print
-# print "targdict={} and objects='AnalogSignal' ", blk.filter(targdict={}, objects='ANALOGSignal')
-# print
-# print "targdict={} and objects=AnalogSignal ", blk.filter(targdict={}, objects=AnalogSignal)
-# print
-# print "targdict={} and objects=['SPikETRAin'] ", blk.filter(targdict={}, objects=["SPikETRAin"])
-# print
-# print "targdict={} and objects=['SPikETRAin', 'AnalogSIGNAl', 'BLOCK'] ", blk.filter(targdict={}, objects=["SPikETRAin", "AnaLOGSIgnal", "BLOCK"])
-# print
-# print "targdict={'a':5, 'b':6, 'c':7 } and objects='AnalogSignal' ", blk.filter(targdict={'a': 5, 'b':6, 'c': 7}, objects='AnalogSignal')
-# print
-# print "targdict={'st':8} and objects='SpikeTrain' ", blk.filter(targdict={'st': 8}, objects='SpikeTrain')
-# print
-# print "targdict={'st':8, 'c':7 } and objects='AnalogSignal' ", blk.filter(targdict={'st': 8, 'c': 7}, objects=['AnalogSignal', 'SpikeTrain'])
+print "Block filter name=Simulation ", blk.filter(name="Simulation #2", container=True)
+print
+# Issue 13
+print "Block filter a=5 and objects=['AnalogSignal'] ", blk.filter(a=5,
+                                                                   objects=['AnalogSignal'])
+print
+print "Block filter a=5 and objects=AnalogSignal ", blk.filter(a=5,
+                                                               objects=AnalogSignal)
+print
+print "Block filter a=5 and objects='ANALOGSiGnal' ", blk.filter(a=5,
+                                                                 objects='ANALOgSiGnal')
+print
+print "Block filter a=5 and objects='AnalogSignal' ", blk.filter(a=5,
+                                                                 objects='AnalogSignal')
+print
+print "Block filter a=5 and objects='analogsignal' ", blk.filter(a=5,
+                                                                 objects='analogsignal')
+#
+print
+print "Unidentified object ", blk.filter(a=5, objects='asdasfasfa')
+print
+print "Block size = ", blk.size
+print
+print "Block filter st=8 and objects='SpikeTrain' ", blk.filter(st=8,
+                                                                objects='SpikeTrain')
+print
+print "targdict is None and objects='AnalogSignal' ", blk.filter(objects='AnalogSIGnal')
+
+# Issue 10
+print
+print "targdict={} and objects='AnalogSignal' ", blk.filter(targdict={}, objects='ANALOGSignal')
+print
+print "targdict={} and objects=AnalogSignal ", blk.filter(targdict={}, objects=AnalogSignal)
+print
+print "targdict={} and objects=['SPikETRAin'] ", blk.filter(targdict={}, objects=["SPikETRAin"])
+print
+print "targdict={} and objects=['SPikETRAin', 'AnalogSIGNAl', 'BLOCK'] ", blk.filter(targdict={}, objects=["SPikETRAin", "AnaLOGSIgnal", "BLOCK"])
+
+# Issue 15
+print
+print "targdict={'a':5, 'b':6, 'c':7 } and objects='AnalogSignal' ", blk.filter(targdict={'a': 5, 'b':6, 'c': 7}, objects='AnalogSignal')
+print
+print "targdict={'st':8} and objects='SpikeTrain' ", blk.filter(targdict={'st': 8}, objects='SpikeTrain')
+print
+print "targdict={'st':8, 'c':7 } and objects='AnalogSignal' ", blk.filter(targdict={'st': 8, 'c': 7}, objects=['AnalogSignal', 'SpikeTrain'])
+
+# Issue 11 - NOT DONE YET
 print
 print "targdict=[{'unit_id':0, 'unit_id':1},{'electrode_id':7}] and objects='SpikeTrain' ", blk.filter(targdict=[{'unit_id': 0, 'unit_id': 1}, {'electrode_id': 7}], objects=SpikeTrain)
+
+# Issue 7 - NOT DONE YET
+print
+h=blk.filter({'t_start':0})
+print len(h)
+print h[0]
+print h[0].t_start
+
+# Issue 14 - deep copy problem
