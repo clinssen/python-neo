@@ -304,6 +304,18 @@ class NeoMatlabIO(BaseIO):
                 struct[attrname] = str(getattr(ob, attrname))
             else:
                 struct[attrname] = getattr(ob, attrname)
+                
+        for i, annotname in ob.annotations:
+            annottype=type(annotname)
+
+            if annottype == pq.Quantity:
+                struct['annotation_'+annotname] = getattr(ob, attrname).magnitude
+                struct['annotation_'+annotname + '_units'] = getattr(
+                    ob, annotname).dimensionality.string
+            elif annottype == datetime:
+                struct['annotation_'+annotname] = str(getattr(ob, annotname))
+            else:
+                struct['annotation_'+annotname] = getattr(ob, annotname)
 
         return struct
 
