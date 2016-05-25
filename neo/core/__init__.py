@@ -34,6 +34,7 @@ from neo.core.recordingchannelgroup import RecordingChannelGroup
 from neo.core.unit import Unit
 
 from neo.core.analogsignal import AnalogSignal
+AnalogSignalArray=AnalogSignal
 from neo.core.irregularlysampledsignal import IrregularlySampledSignal
 
 from neo.core.event import Event
