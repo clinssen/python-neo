@@ -1236,7 +1236,8 @@ class BlackrockIO(BaseIO):
             'timestamp_resolution': 30000,
             'bytes_in_headers':
                 self.__nsx_basic_header[nsx_nb].dtype.itemsize +
-                self.__nsx_ext_header[nsx_nb].dtype.itemsize,
+                self.__nsx_ext_header[nsx_nb].dtype.itemsize *
+                self.__nsx_basic_header[nsx_nb]['channel_count'],
             'sampling_rate':
                 30000 / self.__nsx_basic_header[nsx_nb]['period'] * pq.Hz,
             'time_unit': pq.CompoundUnit("1.0/{0}*s".format(
