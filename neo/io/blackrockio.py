@@ -1519,7 +1519,7 @@ class BlackrockIO(BaseIO):
                     if u.lower() == 'none':
                         units[ch] = None
                     elif u.lower() == 'all':
-                        units[ch] = range(17)
+                        units[ch] = list(range(17))
                         units[ch].append(255)
                     else:
                         raise ValueError("Invalid unit specification.")
@@ -1827,7 +1827,7 @@ class BlackrockIO(BaseIO):
 
         sig_ch = signal[dbl_idx][:, idx_ch][mask].astype(float)
 
-        # transform dig value to pysical value
+        # transform dig value to physical value
         sym_ana = (max_ana[idx_ch] == -min_ana[idx_ch])
         sym_dig = (max_dig[idx_ch] == -min_dig[idx_ch])
         if sym_ana and sym_dig:
