@@ -1217,21 +1217,25 @@ class BlackrockIO(BaseIO):
         # (several are assumed from Blackrock manual)
         labels = []
         unit_array = []
+        min_analog_val_array = []
+        max_analog_val_array = []
         for elid in self.__nsx_ext_header[nsx_nb]['electrode_id']:
             if elid < 129:
                 labels.append('chan%i' % elid)
                 unit_array.append('uV')
+                min_analog_val_array.append(-8191)
+                max_analog_val_array.append(8191)
             else:
                 labels.append('ainp%i' % (elid - 129 + 1))
                 unit_array.append('mV')
+                min_analog_val_array.append(-5000)
+                max_analog_val_array.append(5000)
 
         nsx_parameters = {
             'labels': labels,
             'units': np.array(unit_array),
-            'min_analog_val': np.array(
-                [-5000] * self.__nsx_basic_header[nsx_nb]['channel_count']),
-            'max_analog_val': np.array(
-                [5000] * self.__nsx_basic_header[nsx_nb]['channel_count']),
+            'min_analog_val': np.array(min_analog_val_array),
+            'max_analog_val': np.array(max_analog_val_array),
             'min_digital_val': np.array(
                 [-32767] * self.__nsx_basic_header[nsx_nb]['channel_count']),
             'max_digital_val': np.array(
@@ -1829,6 +1833,8 @@ class BlackrockIO(BaseIO):
 
         sig_ch = signal[dbl_idx][:, idx_ch][mask].astype(float)
 
+        print max_ana[idx_ch]
+        print max_dig[idx_ch]
         # transform dig value to physical value
         sym_ana = (max_ana[idx_ch] == -min_ana[idx_ch])
         sym_dig = (max_dig[idx_ch] == -min_dig[idx_ch])
