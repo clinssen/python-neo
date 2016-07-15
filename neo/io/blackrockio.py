@@ -1833,8 +1833,6 @@ class BlackrockIO(BaseIO):
 
         sig_ch = signal[dbl_idx][:, idx_ch][mask].astype(float)
 
-        print max_ana[idx_ch]
-        print max_dig[idx_ch]
         # transform dig value to physical value
         sym_ana = (max_ana[idx_ch] == -min_ana[idx_ch])
         sym_dig = (max_dig[idx_ch] == -min_dig[idx_ch])
