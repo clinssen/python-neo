@@ -1216,24 +1216,26 @@ class BlackrockIO(BaseIO):
         """
         # (several are assumed from Blackrock manual)
         labels = []
+        unit_array = []
         for elid in self.__nsx_ext_header[nsx_nb]['electrode_id']:
             if elid < 129:
                 labels.append('chan%i' % elid)
+                unit_array.append('uV')
             else:
                 labels.append('ainp%i' % (elid - 129 + 1))
+                unit_array.append('mV')
 
         nsx_parameters = {
             'labels': labels,
-            'units': np.array(
-                ['mV'] * self.__nsx_basic_header[nsx_nb]['channel_count']),
+            'units': np.array(unit_array),
             'min_analog_val': np.array(
                 [-5000] * self.__nsx_basic_header[nsx_nb]['channel_count']),
             'max_analog_val': np.array(
                 [5000] * self.__nsx_basic_header[nsx_nb]['channel_count']),
             'min_digital_val': np.array(
-                [-8192] * self.__nsx_basic_header[nsx_nb]['channel_count']),
+                [-32767] * self.__nsx_basic_header[nsx_nb]['channel_count']),
             'max_digital_val': np.array(
-                [8192] * self.__nsx_basic_header[nsx_nb]['channel_count']),
+                [32767] * self.__nsx_basic_header[nsx_nb]['channel_count']),
             'timestamp_resolution': 30000,
             'bytes_in_headers':
                 self.__nsx_basic_header[nsx_nb].dtype.itemsize +
