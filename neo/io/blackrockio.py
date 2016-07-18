@@ -1012,6 +1012,9 @@ class BlackrockIO(BaseIO):
             'nb_units': dict(zip(
                 self.__nev_ext_header[b'NEUEVWAV']['electrode_id'],
                 self.__nev_ext_header[b'NEUEVWAV']['nb_sorted_units'])),
+            'digitization_factor': dict(zip(
+                self.__nev_ext_header[b'NEUEVWAV']['electrode_id'],
+                self.__nev_ext_header[b'NEUEVWAV']['digitization_factor'])),
             'data_size': self.__nev_basic_header['bytes_in_data_packets'],
             'waveform_size': self.__waveform_size[self.__nev_spec](),
             'waveform_dtypes': self.__get_waveforms_dtype(),
@@ -1214,32 +1217,44 @@ class BlackrockIO(BaseIO):
         Returns parameter (param_name) for a given nsx (nsx_nb) for file spec
         2.1.
         """
-        # (several are assumed from Blackrock manual)
+        # Here, min/max_analog_val and min/max_digital_val are not available in
+        # the nsx, so that we must estimate these parameters from the
+        # digitization factor of the nev (information by Kian Torab, Blackrock
+        # Microsystems). Here dig_factor=max_analog_val/max_digital_val. We set
+        # max_digital_val to 1000, and max_analog_val=dig_factor. dig_factor is
+        # given in nV by definition, so the units turn out to be uV.
         labels = []
-        unit_array = []
-        min_analog_val_array = []
-        max_analog_val_array = []
+        dig_factor = []
         for elid in self.__nsx_ext_header[nsx_nb]['electrode_id']:
+            if self._avail_files['nev']:
+                # This is a workaround for the DigitalFactor overflow in NEV 
+                # files. Remove once Central is updated.
+                # Fix taken from: NMPK toolbox by Blackrock, 
+                # file openNEV, line 464, 
+                # git rev. d0a25eac902704a3a29fa5dfd3aed0744f4733ed
+                df = self.__nev_params('digitization_factor')[elid]
+                if df == 21516:
+                    df = 152592.547;
+                dig_factor.append(df)
+            else:
+                dig_factor.append(None)
+
             if elid < 129:
                 labels.append('chan%i' % elid)
-                unit_array.append('uV')
-                min_analog_val_array.append(-8191)
-                max_analog_val_array.append(8191)
             else:
                 labels.append('ainp%i' % (elid - 129 + 1))
-                unit_array.append('mV')
-                min_analog_val_array.append(-5000)
-                max_analog_val_array.append(5000)
 
         nsx_parameters = {
             'labels': labels,
-            'units': np.array(unit_array),
-            'min_analog_val': np.array(min_analog_val_array),
-            'max_analog_val': np.array(max_analog_val_array),
+            'units': np.array(
+                ['uV'] *
+                self.__nsx_basic_header[nsx_nb]['channel_count']),
+            'min_analog_val': -1 * np.array(dig_factor),
+            'max_analog_val': np.array(dig_factor),
             'min_digital_val': np.array(
-                [-32767] * self.__nsx_basic_header[nsx_nb]['channel_count']),
+                [-1000] * self.__nsx_basic_header[nsx_nb]['channel_count']),
             'max_digital_val': np.array(
-                [32767] * self.__nsx_basic_header[nsx_nb]['channel_count']),
+                [ 1000] * self.__nsx_basic_header[nsx_nb]['channel_count']),
             'timestamp_resolution': 30000,
             'bytes_in_headers':
                 self.__nsx_basic_header[nsx_nb].dtype.itemsize +
@@ -1786,7 +1801,8 @@ class BlackrockIO(BaseIO):
         return st
 
     def __read_analogsignal(
-            self, n_start, n_stop, signal, channel_id, nsx_nb, lazy=False):
+            self, n_start, n_stop, signal, channel_id, nsx_nb, scaling,
+            lazy=False):
         """
         Creates analogsignal for signal of channel in nsx data.
         """
@@ -1795,6 +1811,8 @@ class BlackrockIO(BaseIO):
             'sampling_rate', nsx_nb)
         nsx_time_unit = self.__nsx_params[self.__nsx_spec[nsx_nb]](
             'time_unit', nsx_nb)
+        labels = self.__nsx_params[self.__nsx_spec[nsx_nb]](
+            'labels', nsx_nb)
         max_ana = self.__nsx_params[self.__nsx_spec[nsx_nb]](
             'max_analog_val', nsx_nb)
         min_ana = self.__nsx_params[self.__nsx_spec[nsx_nb]](
@@ -1805,8 +1823,6 @@ class BlackrockIO(BaseIO):
             'min_digital_val', nsx_nb)
         units = self.__nsx_params[self.__nsx_spec[nsx_nb]](
             'units', nsx_nb)
-        labels = self.__nsx_params[self.__nsx_spec[nsx_nb]](
-            'labels', nsx_nb)
 
         dbl_idx = self.__nsx_databl_param[self.__nsx_spec[nsx_nb]](
             'databl_idx', nsx_nb, n_start, n_stop)
@@ -1831,22 +1847,34 @@ class BlackrockIO(BaseIO):
         mask = (data_times >= n_start) & (data_times < n_stop)
         data_times = data_times[mask].astype(float)
 
-        sig_ch = signal[dbl_idx][:, idx_ch][mask].astype(float)
+        if scaling == 'voltage':
+            if not self._avail_files['nev']:
+                raise ValueError(
+                    'Cannot convert signals in filespec 2.1 nsX '
+                    'files to voltage without nev file.')
+            sig_ch = signal[dbl_idx][:, idx_ch][mask].astype(float)
 
-        # transform dig value to physical value
-        sym_ana = (max_ana[idx_ch] == -min_ana[idx_ch])
-        sym_dig = (max_dig[idx_ch] == -min_dig[idx_ch])
-        if sym_ana and sym_dig:
-            sig_ch *= float(max_ana[idx_ch]) / float(max_dig[idx_ch])
+            # transform dig value to physical value
+            sym_ana = (max_ana[idx_ch] == -min_ana[idx_ch])
+            sym_dig = (max_dig[idx_ch] == -min_dig[idx_ch])
+            if sym_ana and sym_dig:
+                sig_ch *= float(max_ana[idx_ch]) / float(max_dig[idx_ch])
+            else:
+                # general case
+                sig_ch -= min_dig[idx_ch]
+                sig_ch *= float(max_ana[idx_ch] - min_ana) / \
+                    float(max_dig[idx_ch] - min_dig)
+                sig_ch += float(min_ana[idx_ch])
+            sig_unit = units[idx_ch].decode()
+        elif scaling == 'raw':
+            sig_ch = signal[dbl_idx][:, idx_ch][mask].astype(int)
+            sig_unit = 'dimensionless'
         else:
-            # general case
-            sig_ch -= min_dig[idx_ch]
-            sig_ch *= float(max_ana[idx_ch] - min_ana) / \
-                float(max_dig[idx_ch] - min_dig)
-            sig_ch += float(min_ana[idx_ch])
+            raise ValueError(
+                'Unkown option {1} for parameter scaling.'.format(scaling))
 
         anasig = AnalogSignal(
-            signal=pq.Quantity(sig_ch, units[idx_ch].decode(), copy=False),
+            signal=pq.Quantity(sig_ch, sig_unit, copy=False),
             sampling_rate=sampling_rate,
             t_start=data_times[0].rescale(nsx_time_unit),
             name=labels[idx_ch],
@@ -1982,7 +2010,8 @@ class BlackrockIO(BaseIO):
     def read_segment(
             self, n_start, n_stop, name=None, description=None, index=None,
             nsx_to_load='none', channels='none', units='none',
-            load_waveforms=False, load_events=False, lazy=False, cascade=True):
+            load_waveforms=False, load_events=False, scaling='raw',
+            lazy=False, cascade=True):
         """
         Returns an annotated neo.core.segment.Segment.
 
@@ -2020,6 +2049,13 @@ class BlackrockIO(BaseIO):
                 If True, waveforms are attached to all loaded spiketrains.
             load_events (boolean):
                 If True, all recorded events are loaded.
+            scaling (str):
+                Determines whether time series of individual
+                electrodes/channels are returned as AnalogSignals containing
+                raw integer samples ('raw'), or scaled to arrays of floats
+                representing voltage ('voltage'). Note that for file
+                specification 2.1 and lower, the option 'voltage' requires a
+                nev file to be present.
             lazy (boolean):
                 If True, only the shape of the data is loaded.
             cascade (boolean):
@@ -2156,6 +2192,7 @@ class BlackrockIO(BaseIO):
                         signal=nsx_data,
                         channel_id=ch_id,
                         nsx_nb=nsx_nb,
+                        scaling=scaling,
                         lazy=lazy)
 
                     if anasig is not None:
@@ -2176,7 +2213,8 @@ class BlackrockIO(BaseIO):
     def read_block(
             self, index=None, name=None, description=None, nsx_to_load='none',
             n_starts=None, n_stops=None, channels='none', units='none',
-            load_waveforms=False, load_events=False, lazy=False, cascade=True):
+            load_waveforms=False, load_events=False, scaling='raw',
+            lazy=False, cascade=True):
         """
         Args:
             index (None, int):
@@ -2214,6 +2252,13 @@ class BlackrockIO(BaseIO):
                 If True, waveforms are attached to all loaded spiketrains.
             load_events (boolean):
                 If True, all recorded events are loaded.
+            scaling (str):
+                Determines whether time series of individual
+                electrodes/channels are returned as AnalogSignals containing
+                raw integer samples ('raw'), or scaled to arrays of floats
+                representing voltage ('voltage'). Note that for file
+                specification 2.1 and lower, the option 'voltage' requires a
+                nev file to be present.
             lazy (bool):
                 If True, only the shape of the data is loaded.
             cascade (bool or "lazy"):
@@ -2293,6 +2338,7 @@ class BlackrockIO(BaseIO):
                 units=units,
                 load_waveforms=load_waveforms,
                 load_events=load_events,
+                scaling=scaling,
                 lazy=lazy,
                 cascade=cascade)
 
