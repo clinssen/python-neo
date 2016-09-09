@@ -1926,8 +1926,10 @@ class BlackrockIO(BaseIO):
             np.array([channel_id]),
             file_origin=self.filename)
 
+        # TODO: This will never be None -- should we not make index a required
+        # field?
         if index is not None:
-            chidx.index = index
+            chidx.index = np.array([index])
             chidx.name = "ChannelIndex {0}".format(chidx.index)
         else:
             chidx.name = "ChannelIndex"
