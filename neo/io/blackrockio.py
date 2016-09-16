@@ -1023,6 +1023,7 @@ class BlackrockIO(BaseIO):
             'waveform_time_unit': pq.CompoundUnit("1.0/{0} * s".format(
                 self.__nev_basic_header['sample_resolution'])),
             'waveform_unit': pq.uV}
+        #TODO: Check if this can be manually changed (also use scaling kw here?)
 
         return nev_parameters[param_name]
 
