@@ -1023,7 +1023,6 @@ class BlackrockIO(BaseIO):
             'waveform_time_unit': pq.CompoundUnit("1.0/{0} * s".format(
                 self.__nev_basic_header['sample_resolution'])),
             'waveform_unit': pq.uV}
-        #TODO: Check if this can be manually changed (also use scaling kw here?)
 
         return nev_parameters[param_name]
 
@@ -1752,7 +1751,7 @@ class BlackrockIO(BaseIO):
 
     def __read_spiketrain(
             self, n_start, n_stop, spikes, channel_id, unit_id,
-            load_waveforms=False, lazy=False):
+            load_waveforms=False, lazy=False, scaling='raw'):
         """
         Creates spiketrains for Spikes in nev data.
         """
@@ -1790,7 +1789,17 @@ class BlackrockIO(BaseIO):
             waveforms = spikes['waveform'].flatten().view(wf_dtype)
             waveforms = waveforms.reshape(spikes.size, 1, wf_size)
 
-            st.waveforms = waveforms[mask] * self.__nev_params('waveform_unit')
+            if scaling == 'voltage':
+                st.waveforms = (
+                    waveforms[mask] * self.__nev_params('waveform_unit') *
+                    self.__nev_params('digitization_factor')[channel_id] /
+                    1000.)
+            elif scaling == 'raw':
+                st.waveforms = waveforms[mask]*pq.dimensionless
+            else:
+                raise ValueError(
+                'Unkown option {1} for parameter scaling.'.format(scaling))
+
             st.sampling_rate = self.__nev_params('waveform_sampling_rate')
             st.left_sweep = self.__get_left_sweep_waveforms()[channel_id]
 
@@ -2164,6 +2173,7 @@ class BlackrockIO(BaseIO):
                                     channel_id=ch_id,
                                     unit_id=un_id,
                                     load_waveforms=load_waveforms,
+                                    scaling=scaling,
                                     lazy=lazy)
 
                                 seg.spiketrains.append(st)
