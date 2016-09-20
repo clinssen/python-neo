@@ -348,7 +348,7 @@ class BlackrockIO(BaseIO):
         if self._verbose:
             if text not in self.__verbose_messages:
                 self.__verbose_messages.append(text)
-                print('BlackrockIO: ' + text)
+                print(str(self.__class__.__name__) + ': ' + text)
 
     def __extract_nsx_file_spec(self, nsx_nb):
         """
