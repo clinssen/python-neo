@@ -1514,6 +1514,8 @@ class BlackrockIO(BaseIO):
 
         if channels:
             if len(set(all_channels) & set(channels)) < len(channels):
+                # TODO: Perhaps this should be a warning rather than an
+                # exception (eg for loading channels=range(100))?
                 raise ValueError("Unknown channel id in channels.")
         else:
             self._print_verbose("No channel is specified, therefore no "
