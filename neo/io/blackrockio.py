@@ -2277,7 +2277,7 @@ class BlackrockIO(BaseIO):
             cascade (bool or "lazy"):
                 If True, only the block without children is returned.
 
-        Returns (neo.segment.Segment):
+        Returns (neo.Block):
             Annotations:
                 avail_file_set (list):
                     List of extensions of all available files for the given
