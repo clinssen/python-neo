@@ -1767,9 +1767,12 @@ class BlackrockIO(BaseIO):
             channel_id, self.__get_unit_classification(unit_id))
 
         # get spike times for given time interval
-        times = spikes['timestamp'] * event_unit
-        mask = (times >= n_start) & (times < n_stop)
-        times = times[mask].astype(float)
+        if not lazy:
+            times = spikes['timestamp'] * event_unit
+            mask = (times >= n_start) & (times < n_stop)
+            times = times[mask].astype(float)
+        else:
+            times = np.array([]) * event_unit
 
         st = SpikeTrain(
             times=times,
@@ -1781,7 +1784,6 @@ class BlackrockIO(BaseIO):
 
         if lazy:
             st.lazy_shape = np.shape(times)
-            st.times = []
 
         # load waveforms if wanted
         if load_waveforms and not lazy:
@@ -1818,6 +1820,11 @@ class BlackrockIO(BaseIO):
         """
         Creates analogsignal for signal of channel in nsx data.
         """
+        # TODO: The following part is extremely slow, since the memmaps for the
+        # headers are created again and again. In particular, this makes lazy
+        # loading slow as well. Solution would be to create header memmaps up
+        # front.
+        
         # get parameters
         sampling_rate = self.__nsx_params[self.__nsx_spec[nsx_nb]](
             'sampling_rate', nsx_nb)
@@ -1835,14 +1842,13 @@ class BlackrockIO(BaseIO):
             'min_digital_val', nsx_nb)
         units = self.__nsx_params[self.__nsx_spec[nsx_nb]](
             'units', nsx_nb)
-
         dbl_idx = self.__nsx_databl_param[self.__nsx_spec[nsx_nb]](
             'databl_idx', nsx_nb, n_start, n_stop)
         t_start = self.__nsx_databl_param[self.__nsx_spec[nsx_nb]](
             'databl_t_start', nsx_nb, n_start, n_stop)
         t_stop = self.__nsx_databl_param[self.__nsx_spec[nsx_nb]](
             'databl_t_stop', nsx_nb, n_start, n_stop)
-
+        
         elids_nsx = list(self.__nsx_ext_header[nsx_nb]['electrode_id'])
         if channel_id in elids_nsx:
             idx_ch = elids_nsx.index(channel_id)
@@ -1852,43 +1858,55 @@ class BlackrockIO(BaseIO):
         description = \
             "AnalogSignal from channel: {0}, label: {1}, nsx: {2}".format(
                 channel_id, labels[idx_ch], nsx_nb)
+        
+        n_start_rescaled = n_start.rescale(nsx_time_unit)
+        n_stop_rescaled = n_stop.rescale(nsx_time_unit)
 
-        data_times = np.arange(
-            t_start.item(), t_stop.item(),
-            self.__nsx_basic_header[nsx_nb]['period']) * t_start.units
-        mask = (data_times >= n_start) & (data_times < n_stop)
-        data_times = data_times[mask].astype(float)
+        i_start = np.ceil(n_start_rescaled.magnitude - t_start.magnitude)
+        i_stop = np.floor(n_stop_rescaled.magnitude - t_start.magnitude)
+        duration = i_stop - i_start
 
-        if scaling == 'voltage':
-            if not self._avail_files['nev']:
-                raise ValueError(
-                    'Cannot convert signals in filespec 2.1 nsX '
-                    'files to voltage without nev file.')
-            sig_ch = signal[dbl_idx][:, idx_ch][mask].astype(float)
+        if not lazy:
+            data_times = np.arange(
+                t_start.item(), t_stop.item(),
+                self.__nsx_basic_header[nsx_nb]['period']) * t_start.units
+            mask = (data_times >= n_start) & (data_times < n_stop)
+            data_times = data_times[mask].astype(float)
 
-            # transform dig value to physical value
-            sym_ana = (max_ana[idx_ch] == -min_ana[idx_ch])
-            sym_dig = (max_dig[idx_ch] == -min_dig[idx_ch])
-            if sym_ana and sym_dig:
-                sig_ch *= float(max_ana[idx_ch]) / float(max_dig[idx_ch])
+            if scaling == 'voltage':
+                if not self._avail_files['nev']:
+                    raise ValueError(
+                        'Cannot convert signals in filespec 2.1 nsX '
+                        'files to voltage without nev file.')
+                sig_ch = signal[dbl_idx][:, idx_ch][mask].astype(float)
+
+                # transform dig value to physical value
+                sym_ana = (max_ana[idx_ch] == -min_ana[idx_ch])
+                sym_dig = (max_dig[idx_ch] == -min_dig[idx_ch])
+                if sym_ana and sym_dig:
+                    sig_ch *= float(max_ana[idx_ch]) / float(max_dig[idx_ch])
+                else:
+                    # general case
+                    sig_ch -= min_dig[idx_ch]
+                    sig_ch *= float(max_ana[idx_ch] - min_ana) / \
+                        float(max_dig[idx_ch] - min_dig)
+                    sig_ch += float(min_ana[idx_ch])
+                sig_unit = units[idx_ch].decode()
+            elif scaling == 'raw':
+                sig_ch = signal[dbl_idx][:, idx_ch][mask].astype(int)
+                sig_unit = pq.dimensionless
             else:
-                # general case
-                sig_ch -= min_dig[idx_ch]
-                sig_ch *= float(max_ana[idx_ch] - min_ana) / \
-                    float(max_dig[idx_ch] - min_dig)
-                sig_ch += float(min_ana[idx_ch])
-            sig_unit = units[idx_ch].decode()
-        elif scaling == 'raw':
-            sig_ch = signal[dbl_idx][:, idx_ch][mask].astype(int)
-            sig_unit = 'dimensionless'
+                raise ValueError(
+                    'Unkown option {1} for parameter scaling.'.format(scaling))
         else:
-            raise ValueError(
-                'Unkown option {1} for parameter scaling.'.format(scaling))
+            sig_ch = np.array([])
+            sig_unit = pq.dimensionless
 
         anasig = AnalogSignal(
             signal=pq.Quantity(sig_ch, sig_unit, copy=False),
             sampling_rate=sampling_rate,
-            t_start=data_times[0].rescale(nsx_time_unit),
+            #t_start=data_times[0].rescale(nsx_time_unit),
+            t_start=i_start * nsx_time_unit,
             name=labels[idx_ch],
             description=description,
             file_origin='.'.join([self._filenames['nsx'], 'ns%i' % nsx_nb]))
@@ -1899,9 +1917,7 @@ class BlackrockIO(BaseIO):
             ch_label=labels[idx_ch])
 
         if lazy:
-            anasig.lazy_shape = np.shape(sig_ch)
-            anasig.signal = []
-
+            anasig.lazy_shape = [duration]
         return anasig
 
     def __read_unit(self, unit_id, channel_id):
