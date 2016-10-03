@@ -2383,7 +2383,7 @@ class BlackrockIO(BaseIO):
 
                 chidx = self.__read_channelindex(
                     channel_id=ch_id,
-                    index=i,
+                    index=0,
                     channel_units=ch_units,
                     cascade=cascade)
 
