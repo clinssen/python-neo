@@ -2375,7 +2375,7 @@ class BlackrockIO(BaseIO):
 
         # read recordingchannelgroup
         if channels:
-            for i, ch_id in enumerate(channels):
+            for ch_id in channels:
                 if units and ch_id in units.keys():
                     ch_units = units[ch_id]
                 else:
