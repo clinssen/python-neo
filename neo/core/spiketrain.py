@@ -79,7 +79,7 @@ def _check_waveform_dimensions(spiketrain):
 
     waveforms = spiketrain.waveforms
 
-    if not (waveforms and waveforms.size):
+    if waveforms is None and not waveforms.shape.any():
         return
 
     if waveforms.shape[0] != len(spiketrain):
