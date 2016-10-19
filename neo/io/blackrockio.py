@@ -1809,7 +1809,7 @@ class BlackrockIO(BaseIO):
 
         # add additional annotations
         st.annotate(
-            ch_id=int(channel_id),
+            channel_id=int(channel_id),
             unit_id=int(unit_id))
 
         return st
@@ -1858,7 +1858,7 @@ class BlackrockIO(BaseIO):
         description = \
             "AnalogSignal from channel: {0}, label: {1}, nsx: {2}".format(
                 channel_id, labels[idx_ch], nsx_nb)
-        
+
         n_start_rescaled = n_start.rescale(nsx_time_unit)
         n_stop_rescaled = n_stop.rescale(nsx_time_unit)
 
@@ -1913,8 +1913,8 @@ class BlackrockIO(BaseIO):
 
         anasig.annotate(
             nsx=nsx_nb,
-            ch_id=channel_id,
-            ch_label=labels[idx_ch])
+            channel_id=channel_id,
+            channel_label=labels[idx_ch])
 
         if lazy:
             anasig.lazy_shape = [duration]
@@ -1937,7 +1937,7 @@ class BlackrockIO(BaseIO):
             file_origin='.'.join([self._filenames['nev'], 'nev']))
 
         # add additional annotations
-        un.annotate(ch_id=int(channel_id))
+        un.annotate(channel_id=int(channel_id))
         un.annotate(unit_id=int(unit_id))
 
         return un
