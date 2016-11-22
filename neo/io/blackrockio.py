@@ -1848,7 +1848,7 @@ class BlackrockIO(BaseIO):
             'databl_t_start', nsx_nb, n_start, n_stop)
         t_stop = self.__nsx_databl_param[self.__nsx_spec[nsx_nb]](
             'databl_t_stop', nsx_nb, n_start, n_stop)
-        
+
         elids_nsx = list(self.__nsx_ext_header[nsx_nb]['electrode_id'])
         if channel_id in elids_nsx:
             idx_ch = elids_nsx.index(channel_id)
@@ -1859,20 +1859,13 @@ class BlackrockIO(BaseIO):
             "AnalogSignal from channel: {0}, label: {1}, nsx: {2}".format(
                 channel_id, labels[idx_ch], nsx_nb)
 
-        n_start_rescaled = n_start.rescale(nsx_time_unit)
-        n_stop_rescaled = n_stop.rescale(nsx_time_unit)
-
-        i_start = np.ceil(n_start_rescaled.magnitude - t_start.magnitude)
-        i_stop = np.floor(n_stop_rescaled.magnitude - t_start.magnitude)
-        duration = i_stop - i_start
+        data_times = np.arange(
+            t_start.item(), t_stop.item(),
+            self.__nsx_basic_header[nsx_nb]['period']) * t_start.units
+        mask = (data_times >= n_start) & (data_times < n_stop)
+        data_times = data_times[mask].astype(float)
 
         if not lazy:
-            data_times = np.arange(
-                t_start.item(), t_stop.item(),
-                self.__nsx_basic_header[nsx_nb]['period']) * t_start.units
-            mask = (data_times >= n_start) & (data_times < n_stop)
-            data_times = data_times[mask].astype(float)
-
             if scaling == 'voltage':
                 if not self._avail_files['nev']:
                     raise ValueError(
@@ -1905,8 +1898,7 @@ class BlackrockIO(BaseIO):
         anasig = AnalogSignal(
             signal=pq.Quantity(sig_ch, sig_unit, copy=False),
             sampling_rate=sampling_rate,
-            #t_start=data_times[0].rescale(nsx_time_unit),
-            t_start=i_start * nsx_time_unit,
+            t_start=data_times[0].rescale(nsx_time_unit),
             name=labels[idx_ch],
             description=description,
             file_origin='.'.join([self._filenames['nsx'], 'ns%i' % nsx_nb]))
@@ -1917,7 +1909,7 @@ class BlackrockIO(BaseIO):
             channel_label=labels[idx_ch])
 
         if lazy:
-            anasig.lazy_shape = [duration]
+            anasig.lazy_shape = [len(data_times)]
         return anasig
 
     def __read_unit(self, unit_id, channel_id):
