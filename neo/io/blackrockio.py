@@ -1943,7 +1943,7 @@ class BlackrockIO(BaseIO):
         return un
 
     def __read_channelindex(
-            self, channel_id, index=None, channel_units=None, cascade=True):
+            self, channel_id, index=0, channel_units=None, cascade=True):
         """
         Returns a ChannelIndex with the
         given index for the given channels containing a neo.core.unit.Unit
@@ -1951,14 +1951,9 @@ class BlackrockIO(BaseIO):
         """
 
         chidx = ChannelIndex(
-            np.array([channel_id]),
+            index=np.array([index]),
+            name="ChannelIndex for channel {0}".format(channel_id),
             file_origin=self.filename)
-
-        if index is not None:
-            chidx.index = np.array([index])
-            chidx.name = "ChannelIndex {0}".format(chidx.index)
-        else:
-            chidx.name = "ChannelIndex"
 
         if self._avail_files['nev']:
             chidx.channel_names = np.array([self.__nev_params(
@@ -2373,7 +2368,7 @@ class BlackrockIO(BaseIO):
 
             bl.segments.append(seg)
 
-        # read recordingchannelgroup
+        # read ChannelIndexes
         if channels:
             for ch_id in channels:
                 if units and ch_id in units.keys():
