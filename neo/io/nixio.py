@@ -1092,6 +1092,7 @@ class NixIO(BaseIO):
             attr["extents"] = neoobj.durations
             attr["extents.units"] = cls._get_units(neoobj.durations)
         if hasattr(neoobj, "labels"):
+            print(neoobj.name,type(neoobj.labels))
             attr["labels"] = neoobj.labels.tolist()
         if hasattr(neoobj, "waveforms") and neoobj.waveforms is not None:
             attr["waveforms"] = list(wf.magnitude for wf in
@@ -1105,8 +1106,19 @@ class NixIO(BaseIO):
 
     def _add_annotations(self, annotations, metadata):
         for k, v in annotations.items():
+            try:
+                v = v.isoformat()
+            except:
+                pass
+            
             v = self._to_value(v)
-            metadata[k] = v
+            try:
+                metadata[k] = v
+            except TypeError:
+                try:
+                    metadata[k] = str(v)
+                except:
+                    print("Oh no!", v)
 
     def _to_value(self, v):
         """
@@ -1129,17 +1141,20 @@ class NixIO(BaseIO):
             v = nixio.Value(v.decode())
         elif isinstance(v, Iterable):
             vv = list()
-            for item in v:
-                if isinstance(item, Iterable):
-                    self.logger.warn("Multidimensional arrays and nested "
-                                     "containers are not currently supported "
-                                     "when writing to NIX.")
-                    return None
-                if type(item).__module__ == "numpy":
-                    item = nixio.Value(item.item())
-                else:
-                    item = nixio.Value(item)
-                vv.append(item)
+            try:
+                for item in v:
+                    if isinstance(item, Iterable):
+                        self.logger.warn("Multidimensional arrays and nested "
+                                         "containers are not currently supported "
+                                         "when writing to NIX.")
+                        return None
+                    if type(item).__module__ == "numpy":
+                        item = nixio.Value(item.item())
+                    else:
+                        item = nixio.Value(item)
+                    vv.append(item)
+            except:
+                v = nixio.Value(v.item())
             if not len(vv):
                 vv = None
             v = vv

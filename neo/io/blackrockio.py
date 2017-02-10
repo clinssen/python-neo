@@ -973,7 +973,7 @@ class BlackrockIO(BaseIO):
                     ('node_id', 'uint16'),
                     ('node_count', 'uint16'),
                     ('point_count', 'uint16'),
-                    ('tracking_points', 'uint16', ((data_size - 14) / 2, ))]},
+                    ('tracking_points', 'uint16', ((data_size - 14) // 2, ))]},
             'ButtonTrigger': {
                 'a': [
                     ('timestamp', 'uint32'),
@@ -1740,7 +1740,7 @@ class BlackrockIO(BaseIO):
         mask = (times >= n_start) & (times < n_stop)
         if np.sum(mask) > 0:
             ev = Event(
-                times=times[mask].astype(float),
+                times=times[mask].astype(float).rescale('ms'),
                 labels=labels[mask],
                 name=ev_dict['name'],
                 description=ev_dict['desc'])
@@ -1775,7 +1775,7 @@ class BlackrockIO(BaseIO):
             times = np.array([]) * event_unit
 
         st = SpikeTrain(
-            times=times,
+            times=times.rescale('ms'),
             name=name,
             description=desc,
             file_origin='.'.join([self._filenames['nev'], 'nev']),
@@ -1904,9 +1904,9 @@ class BlackrockIO(BaseIO):
 
         anasig = AnalogSignal(
             signal=pq.Quantity(sig_ch, sig_unit, copy=False),
-            sampling_rate=sampling_rate,
+            sampling_rate=sampling_rate.rescale('Hz'),
             #t_start=data_times[0].rescale(nsx_time_unit),
-            t_start=i_start * nsx_time_unit,
+            t_start=(i_start * nsx_time_unit).rescale('ms'),
             name=labels[idx_ch],
             description=description,
             file_origin='.'.join([self._filenames['nsx'], 'ns%i' % nsx_nb]))
@@ -2111,8 +2111,8 @@ class BlackrockIO(BaseIO):
 
         seg = Segment(file_origin=self.filename)
         seg.annotate(
-            t_min=n_start,
-            t_max=n_stop)
+            t_min=n_start.rescale('ms'),
+            t_max=n_stop.rescale('ms'))
 
         # set user defined annotations if they were provided
         if index is None:
