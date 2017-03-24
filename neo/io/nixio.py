@@ -581,7 +581,7 @@ class NixIO(BaseIO):
                 attr["name"], "neo."+attr["type"], timesda
             )
             # parentobj.multi_tags.append(nixobj)
-            parentobj.multi_tags._add_multi_tag_obj(nixobj)
+            parentobj._add_multi_tag_obj(nixobj)
         elif attr["type"] == "unit":
             nixobj = parentobj.create_source(attr["name"], "neo.unit")
         else:
