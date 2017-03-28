@@ -19,6 +19,17 @@ from neo.core.baseneo import BaseNeo, merge_annotations
 PY_VER = sys.version_info[0]
 
 
+def _new_event(cls, times=None, labels=None, units=None, name=None, description=None,
+                file_origin=None, annotations=None):
+    '''
+    A function to map :meth:`BaseEvent.__new__` to function that
+    does not do the unit checking. This is needed for :module:`pickle` to work.
+    '''
+    if annotations is None:
+        annotations = {}
+    return Event(times, labels, units, name, description,
+                file_origin, **annotations)
+    
 class Event(BaseNeo, pq.Quantity):
     '''
     Array of events.
@@ -96,6 +107,18 @@ class Event(BaseNeo, pq.Quantity):
         '''
         BaseNeo.__init__(self, name=name, file_origin=file_origin,
                          description=description, **annotations)
+
+    def __reduce__(self):
+        '''
+        Map the __new__ function onto _new_BaseEvent, so that pickle
+        works
+        '''
+        import numpy
+        return _new_event, (self.__class__, numpy.array(self),
+                                 self.labels, self.units,
+                                 self.name,
+                                 self.description, self.file_origin,
+                                 self.annotations)
 
     def __array_finalize__(self, obj):
         super(Event, self).__array_finalize__(obj)
