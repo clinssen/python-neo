@@ -28,10 +28,10 @@ except ImportError as err:
     HAVE_SCIPY = False
     SCIPY_ERR = err
 else:
-    if version.LooseVersion(scipy.version.version) < '0.12.0':
+    if version.LooseVersion(scipy.version.version) < '0.8':
         HAVE_SCIPY = False
         SCIPY_ERR = ImportError("your scipy version is too old to support " +
-                                "MatlabIO, you need at least 0.12.0. " +
+                                "MatlabIO, you need at least 0.8. " +
                                 "You have %s" % scipy.version.version)
     else:
         HAVE_SCIPY = True
@@ -304,6 +304,17 @@ class NeoMatlabIO(BaseIO):
                 struct[attrname] = str(getattr(ob, attrname))
             else:
                 struct[attrname] = getattr(ob, attrname)
+                
+        for i, annotname in enumerate(ob.annotations):
+            annottype=type(annotname)
+
+            if annottype == pq.Quantity:
+                struct['annotation_'+annotname] = ob.annotations[annotname].magnitude
+                struct['annotation_'+annotname + '_units'] = ob.annotations[annotname].dimensionality.string
+            elif annottype == datetime:
+                struct['annotation_'+annotname] = str(ob.annotations[annotname])
+            else:
+                struct['annotation_'+annotname] = ob.annotations[annotname]
 
         return struct
 
