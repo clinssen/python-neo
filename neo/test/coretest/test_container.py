@@ -102,6 +102,68 @@ class TestContainerNeo(unittest.TestCase):
         container.create_many_to_many_relationship()
         container.create_relationship()
 
+class Test_Container_filter(unittest.TestCase):
+
+    class TestContainer(Container):
+        _container_child_objects = ('Container',)
+        _child_properties = ()
+        _recommended_attrs = (Container._recommended_attrs)
+        _repr_pretty_attrs_keys_ = (Container._repr_pretty_attrs_keys_)
+        _repr_pretty_containers = ('container',)
+
+
+        def __init__(self, name=None, description=None, file_origin=None,
+                     **annotations):
+            super(Test_Container_filter.TestContainer,self).__init__(
+                    name=None, description=None, file_origin=None,
+                    **annotations)
+
+    def setUp(self):
+        self.name = 'a container 1'
+        self.description = 'this is a test 1'
+        self.cont = self.TestContainer(name=self.name,
+                                    description=self.description)
+
+        self.obj1 = Container(name='object 1', custom_integer_annotation=1,
+                              custom_list_annotation=[1,1,1])
+        self.obj2 = Container(name='object 2', custom_integer_annotation=2,
+                              custom_list_annotation=[2,2,3])
+
+        self.cont.containers.extend([self.obj1, self.obj2])
+            # container_children = [self.obj1, self.obj2]
+
+    def test_filter_simple(self):
+        result = self.cont.filter(targdict={'custom_integer_annotation':1},
+                                  data=False, container=True)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0], self.obj1)
+
+    def test_filter_list_annotation(self):
+        result = self.cont.filter(targdict={'custom_list_annotation':[2,2,3]},
+                                  data=False, container=True)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0], self.obj2)
+
+    def test_no_fitting_int_annotation(self):
+        result = self.cont.filter(targdict={'custom_integer_annotation':0},
+                                  data=False, container=True)
+        self.assertEqual(len(result), 0)
+
+    def test_no_fitting_list_annotation(self):
+        result = self.cont.filter(targdict={'custom_list_annotation':[1]},
+                                  data=False, container=True)
+        self.assertEqual(len(result), 0)
+
+    def test_annotation_elementwise_comparison(self):
+        result1 = self.cont.filter(targdict={'custom_list_annotation':
+                                                np.int64(1)},
+                                            data=False, container=True)
+        self.assertEqual(len(result1), 0)
+
+        result2 = self.cont.filter(targdict={'custom_list_annotation':
+                                             np.array([1,1,2])},
+                                   data=False, container=True)
+        self.assertEqual(len(result2), 0)
 
 class Test_Container_merge(unittest.TestCase):
     '''
