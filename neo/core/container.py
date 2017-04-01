@@ -68,15 +68,32 @@ def filterdata(data, targdict=None, objects=None, **kwargs):
             results = filterdata(results, targdict=targ)
         return results
 
+    def compare_entries(entry1, entry2):
+        same = False
+        overlap = entry1 == entry2
+        # check if overlap was calculated elementwise eg. by comparing
+        # [1,1] and np.int64(1)
+        if hasattr(overlap,'__iter__'):
+            if all([hasattr(entry,'__iter__') for entry in [entry1, entry2]]):
+                if len(entry1) == len(entry2) and all(overlap):
+                    same = True
+        elif overlap:
+            same = True
+        return same
+
     # do the actual filtering
     results = []
     for key, value in sorted(targdict.items()):
         for obj in data:
-            if (hasattr(obj, key) and getattr(obj, key) == value and
-                    all([obj is not res for res in results])):
-                results.append(obj)
-            elif (key in obj.annotations and obj.annotations[key] == value and
-                    all([obj is not res for res in results])):
+            if hasattr(obj, key):
+                entry1 = getattr(obj, key)
+            elif key in obj.annotations:
+                entry1 = obj.annotations[key]
+
+            add_object = compare_entries(entry1, value)
+
+            # only append if not selected already
+            if add_object and all([obj is not res for res in results]):
                 results.append(obj)
 
     # keep only objects of the correct classes
