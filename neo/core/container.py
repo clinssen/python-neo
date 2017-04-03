@@ -89,6 +89,8 @@ def filterdata(data, targdict=None, objects=None, **kwargs):
                 entry1 = getattr(obj, key)
             elif key in obj.annotations:
                 entry1 = obj.annotations[key]
+            else:
+                continue
 
             add_object = compare_entries(entry1, value)
 
