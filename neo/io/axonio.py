@@ -46,7 +46,6 @@ import quantities as pq
 
 from neo.io.baseio import BaseIO
 from neo.core import Block, Segment, AnalogSignal, Event
-from neo.io.tools import iteritems
 
 
 class StructFile(BufferedReader):
@@ -302,7 +301,7 @@ class AxonIO(BaseIO):
 
                     anaSig = AnalogSignal(signal, sampling_rate=sampling_rate,
                                           t_start=t_start,
-                                          name=str(name),
+                                          name=str(name.decode("utf-8")),
                                           channel_index=int(num))
                     if lazy:
                         anaSig.lazy_shape = length / nbchannel
@@ -420,11 +419,11 @@ class AxonIO(BaseIO):
             fid.seek(sections['StringsSection']['uBlockIndex'] * BLOCKSIZE)
             big_string = fid.read(sections['StringsSection']['uBytes'])
             goodstart=-1
-            for key in [b'AXENGN', b'clampex', b'Clampex', b'axoscope']:
+            for key in [b'AXENGN', b'clampex', b'Clampex', b'CLAMPEX', b'axoscope']:
                 #goodstart = big_string.lower().find(key)
                 goodstart = big_string.find(key)
                 if goodstart!=-1: break
-            assert goodstart!=-1, 'This file do not contain clampex, axoscope or clampfit in the header'
+            assert goodstart!=-1, 'This file does not contain clampex, axoscope or clampfit in the header'
             big_string = big_string[goodstart:]
             strings = big_string.split(b'\x00')
 
@@ -455,6 +454,7 @@ class AxonIO(BaseIO):
                 else:
                     protocol[key] = np.array(val)
             header['protocol'] = protocol
+            header['sProtocolPath'] = strings[header['uProtocolPathIndex']-1]
 
             # tags
             listTag = []
@@ -544,8 +544,8 @@ class AxonIO(BaseIO):
             'llNumEntries']  # Number of ADC channels
         nDAC = header['sections']['DACSection'][
             'llNumEntries']  # Number of DAC channels
-        nSam = header['protocol'][
-            'lNumSamplesPerEpisode'] / nADC  # Number of samples per episode
+        nSam = int(header['protocol'][
+            'lNumSamplesPerEpisode'] / nADC)  # Number of samples per episode
         nEpi = header['lActualEpisodes']  # Actual number of episodes
         sampling_rate = 1.e6 / header['protocol'][
             'fADCSequenceInterval'] * pq.Hz
@@ -560,12 +560,12 @@ class AxonIO(BaseIO):
                 t_start = 0 * pq.s  # TODO: Possibly check with episode array
                 name = header['listDACInfo'][DACNum]['DACChNames']
                 unit = header['listDACInfo'][DACNum]['DACChUnits'].\
-                    replace(b'\xb5', b'u')  # \xb5 is µ
+                    replace(b'\xb5', b'u').decode('utf-8')  # \xb5 is µ
                 signal = np.ones(nSam) *\
                     header['listDACInfo'][DACNum]['fDACHoldingLevel'] *\
                     pq.Quantity(1, unit)
                 ana_sig = AnalogSignal(signal, sampling_rate=sampling_rate,
-                                       t_start=t_start, name=str(name),
+                                       t_start=t_start, name=name.decode("utf-8"),
                                        channel_index=DACNum)
                 # If there are epoch infos for this DAC
                 if DACNum in header['dictEpochInfoPerDAC']:
@@ -575,16 +575,17 @@ class AxonIO(BaseIO):
                     # Go over EpochInfoPerDAC and change the analog signal
                     # according to the epochs
                     epochInfo = header['dictEpochInfoPerDAC'][DACNum]
-                    for epochNum, epoch in iteritems(epochInfo):
+                    for epochNum, epoch in epochInfo.items():
                         i_begin = i_last
                         i_end = i_last + epoch['lEpochInitDuration'] +\
                             epoch['lEpochDurationInc'] * epiNum
                         dif = i_end-i_begin
-                        ana_sig[i_begin:i_end] = np.ones(len(range(dif))) *\
+                        ana_sig[i_begin:i_end] = np.ones((dif, 1)) *\
                             pq.Quantity(1, unit) * (epoch['fEpochInitLevel'] +
                                                     epoch['fEpochLevelInc'] *
                                                     epiNum)
-                        i_last += epoch['lEpochInitDuration']
+                        i_last += epoch['lEpochInitDuration'] +\
+                            epoch['lEpochDurationInc'] * epiNum
                 seg.analogsignals.append(ana_sig)
             segments.append(seg)
 

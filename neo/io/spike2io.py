@@ -100,6 +100,7 @@ class Spike2IO(BaseIO):
         )
 
         if not cascade:
+            fid.close()
             return seg
 
         def addannotations(ob, channelHeader):
@@ -484,6 +485,7 @@ class HeaderReader(object):
                                       'u1')
                 else:
                     l = np.fromstring(self.array[name][0], 'u1')
+                l = l[0]
                 return self.array[name][1:l + 1]
             else:
                 return self.array[name]
