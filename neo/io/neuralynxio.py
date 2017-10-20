@@ -1491,6 +1491,8 @@ class NeuralynxIO(BaseIO):
                                          self.parameters_nev,
                                          self.parameters_ntt]:
                 # check recoding_closed times for specific file types
+                # TODO: This check should rather check the maximal difference
+                #  within recording_opened (recording_closed) times
                 if any(np.abs(np.diff([i['recording_opened'] for i in
                                        parameter_collection.values()]))
                                > datetime.timedelta(seconds=1)):
@@ -1501,14 +1503,11 @@ class NeuralynxIO(BaseIO):
                 # check recoding_closed times for specific file types
                 if any(np.diff([i['recording_closed'] for i in
                                 parameter_collection.values()
-                                if i[
-                                    'recording_closed'] is not None]) >
-                               datetime.timedelta(
-                                       seconds=0.1)):
+                                if i['recording_closed'] is not None]) >
+                               datetime.timedelta(seconds=1)):
                     raise ValueError(
                             'NCS files were closed after recording with a '
-                            'delay '
-                            'greater than 0.1 second.')
+                            'delay greater than 1 second.')
 
             # get maximal duration of any file in the recording
             parameter_collection = list(self.parameters_ncs.values()) + \
