@@ -722,7 +722,6 @@ class NeoHdf5IO(BaseIO):
                 nattr = fetch_attribute(attr_name, attr, node)
                 if nattr is not None:
                     kwargs[attr_name] = nattr
-            print kwargs
             obj = class_by_name[obj_type](**kwargs)  # instantiate new object
             if lazy and obj_type in lazy_shape_arrays:
                 obj.lazy_shape = get_lazy_shape(obj, node)
