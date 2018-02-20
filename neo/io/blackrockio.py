@@ -646,7 +646,7 @@ class BlackrockIO(BaseIO):
                 channel_types = ('serial', 'parallel')
 
                 # Read name of digital channel and remove 0's
-                self.parameters_nev['DigitalChannelLabel'] = filehandle.read(16).replace('\x00', '')
+                self.parameters_nev['DigitalChannelLabel'] = filehandle.read(16).decode('UTF-8').replace('\x00', '')
 
                 # Read mode of channel: 0=serial, 1=parallel
                 # signed byte 8bit, little endian
