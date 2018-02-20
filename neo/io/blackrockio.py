@@ -297,10 +297,10 @@ class BlackrockIO(BaseIO):
             (self.__file_nsx_header_end_pos[nsx],) = struct.unpack('<I', filehandle.read(4))
 
             # Read label string and remove 0's
-            self.parameters_nsx[nsx]['Label'] = filehandle.read(16).decode('UTF-8').split('\x00', 1)[0]
+            self.parameters_nsx[nsx]['Label'] = filehandle.read(16).decode('UTF-8', 'ignore').split('\x00', 1)[0]
 
             # Read comments and remove 0's
-            self.parameters_nsx[nsx]['Comments'] = filehandle.read(256).decode('UTF-8').split('\x00', 1)[0]
+            self.parameters_nsx[nsx]['Comments'] = filehandle.read(256).decode('UTF-8', 'ignore').split('\x00', 1)[0]
 
             # Read sampling frequency in Hz
             # Note: 30000/N is always an integer
