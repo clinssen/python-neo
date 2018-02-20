@@ -251,7 +251,6 @@ class BlackrockIO(BaseIO):
         # Read header block ID
         fileheader = filehandle.read(8).decode('UTF-8')
 
-        print(fileheader)
         # Determine if old or new file format version based on header ID
         if fileheader == 'NEURALSG':
             # This is a version 2.1 file
