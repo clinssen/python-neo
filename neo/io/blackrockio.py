@@ -297,10 +297,10 @@ class BlackrockIO(BaseIO):
             (self.__file_nsx_header_end_pos[nsx],) = struct.unpack('<I', filehandle.read(4))
 
             # Read label string and remove 0's
-            self.parameters_nsx[nsx]['Label'] = filehandle.read(16).split('\x00', 1)[0]
+            self.parameters_nsx[nsx]['Label'] = filehandle.read(16).decode('UTF-8').split('\x00', 1)[0]
 
             # Read comments and remove 0's
-            self.parameters_nsx[nsx]['Comments'] = filehandle.read(256).split('\x00', 1)[0]
+            self.parameters_nsx[nsx]['Comments'] = filehandle.read(256).decode('UTF-8').split('\x00', 1)[0]
 
             # Read sampling frequency in Hz
             # Note: 30000/N is always an integer
@@ -338,9 +338,9 @@ class BlackrockIO(BaseIO):
             for channel_i in range(self.num_channels_nsx[nsx]):
                 # Initialize dictionary to hold electrode information
                 self.parameters_nsx_electrodes[nsx] = \
-                    [{} for dummy in xrange(256)]
+                    [{} for dummy in range(256)]
 
-                if filehandle.read(2) != 'CC':
+                if filehandle.read(2).decode('UTF-8') != 'CC':
                     raise IOError("Expected channel block " +
                         str(channel_i) +
                         "in .nsX header, but did not encounter correct \
@@ -356,7 +356,7 @@ class BlackrockIO(BaseIO):
 
                 # Read label string and remove 0's
                 self.parameters_nsx_electrodes[nsx][el_id] \
-                    ['ChannelLabel'] = filehandle.read(16).replace('\x00', '')
+                    ['ChannelLabel'] = filehandle.read(16).decode('UTF-8').replace('\x00', '')
 
                 # Read physical connector (bank A-D)
                 # unsigned byte 8bit, little endian
@@ -384,7 +384,7 @@ class BlackrockIO(BaseIO):
 
                 # Read units string and remove 0's
                 self.parameters_nsx_electrodes[nsx][el_id]\
-                    ['Unit'] = filehandle.read(16).replace('\x00', '')
+                    ['Unit'] = filehandle.read(16).decode('UTF-8').replace('\x00', '')
 
                 # Read high frequency cut-off in mHz
                 # unsigned long  32bit, little endian
