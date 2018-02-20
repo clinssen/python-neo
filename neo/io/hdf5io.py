@@ -339,7 +339,7 @@ class NeoHdf5IO(BaseIO):
         Returns the type of the object (string) depending on node.
         """
         try:
-            obj_type = node._f_getattr("_type")
+            obj_type = node._f_getattr("_type").decode('UTF-8')
             return class_by_name[obj_type]
         except:
             return None # that's an alien node
@@ -680,6 +680,8 @@ class NeoHdf5IO(BaseIO):
             attr = lazy_shape_arrays[type(obj).__name__]
             arr = self._data.get_node(node, attr)
             return arr.shape
+
+        path=path.decode('UTF-8')
 
         if path == "/":  # this is just for convenience. Try to return any object
             found = False
