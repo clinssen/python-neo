@@ -502,10 +502,10 @@ class BlackrockIO(BaseIO):
                                                             hour=date_time[4], minute=date_time[5], second=date_time[6], microsecond=date_time[7])
 
         # Read comments and remove 0's
-        self.parameters_nev['Application'] = filehandle.read(32).decode('UTF-8').split('\x00', 1)[0]
+        self.parameters_nev['Application'] = filehandle.read(32).decode('UTF-8','ignore').split('\x00', 1)[0]
 
         # Read comments and remove 0's
-        self.parameters_nev['Comments'] = filehandle.read(256).decode('UTF-8').split('\x00', 1)[0]
+        self.parameters_nev['Comments'] = filehandle.read(256).decode('UTF-8','ignore').split('\x00', 1)[0]
 
         # Read number of extended headers
         # unsigned long 32bit, little endian
