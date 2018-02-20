@@ -440,7 +440,7 @@ class BlackrockIO(BaseIO):
         '''
 
         # Read header block ID
-        fileheader = filehandle.read(8)
+        fileheader = filehandle.read(8).decode('UTF-8')
 
         # Read version number
         # unsigned byte 8bit, little endian
