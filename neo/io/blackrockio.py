@@ -601,7 +601,7 @@ class BlackrockIO(BaseIO):
                 (el_id,) = struct.unpack('<H', filehandle.read(2))
 
                 # Electrode label and remove 0's
-                self.parameters_nev_electrodes[el_id]['Label'] = filehandle.read(16).replace('\x00', '')
+                self.parameters_nev_electrodes[el_id]['Label'] = filehandle.read(16).decode('UTF-8').replace('\x00', '')
 
                 # Unused, 6 bytes
                 filehandle.read(6)
