@@ -342,7 +342,11 @@ class NeoHdf5IO(BaseIO):
             obj_type = node._f_getattr("_type").decode('UTF-8')
             return class_by_name[obj_type]
         except:
-            return None # that's an alien node
+            try:
+                obj_type = node._f_getattr("_type")
+                return class_by_name[obj_type]
+            except:
+                return None # that's an alien node
 
     def _update_path(self, obj, node):
         setattr(obj, "hdf5_path", node._v_pathname)
