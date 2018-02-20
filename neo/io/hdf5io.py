@@ -681,7 +681,11 @@ class NeoHdf5IO(BaseIO):
             arr = self._data.get_node(node, attr)
             return arr.shape
 
-        path=path
+        try:
+            x=path.decode('UTF-8')
+            path=x
+        except:
+            pass
 
         if path == "/":  # this is just for convenience. Try to return any object
             found = False
