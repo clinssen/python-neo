@@ -1633,7 +1633,8 @@ class BlackrockIO(BaseIO):
                     temp1 = np.fromfile(filehandle_nsx, count=1, dtype='b')  # should be 1
                     temp2 = np.fromfile(filehandle_nsx, count=2, dtype='i')  # number of data points that follow (per channel!)
                     #TODO: temp2[0] is the time stamp of the first sample -> should be recognized!!!
-                    if temp1[0] != 1 or temp2[1] != (self.__num_packets_nsx[nsx_i] + 1):
+                    if temp1[0] != 1 or temp2[1] != int(self.__num_packets_nsx[nsx_i] + 1):
+                        print(temp1[0],temp2[1])
                         raise Exception('blackrockio cannot handle files with gaps (available in version 2.2+).')
                     self.nsx_offset[nsx_i] = temp2[0]
                     nsx_offset = self.nsx_offset[nsx_i]
