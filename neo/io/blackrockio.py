@@ -249,8 +249,9 @@ class BlackrockIO(BaseIO):
         '''
 
         # Read header block ID
-        fileheader = filehandle.read(8)
+        fileheader = filehandle.read(8).decode('UTF-8')
 
+        print(fileheader)
         # Determine if old or new file format version based on header ID
         if fileheader == 'NEURALSG':
             # This is a version 2.1 file
@@ -259,7 +260,7 @@ class BlackrockIO(BaseIO):
             self.parameters_nsx[nsx]['VersionMinor'] = 1
 
             # Read label string and remove 0's
-            dummy = filehandle.read(16)
+            dummy = filehandle.read(16).decode('UTF-8')
             self.parameters_nsx[nsx]['Label'] = dummy.replace('\x00', '')
 
             # Read sampling frequency in Hz
@@ -502,10 +503,10 @@ class BlackrockIO(BaseIO):
                                                             hour=date_time[4], minute=date_time[5], second=date_time[6], microsecond=date_time[7])
 
         # Read comments and remove 0's
-        self.parameters_nev['Application'] = filehandle.read(32).split('\x00', 1)[0]
+        self.parameters_nev['Application'] = filehandle.read(32).decode('UTF-8').split('\x00', 1)[0]
 
         # Read comments and remove 0's
-        self.parameters_nev['Comments'] = filehandle.read(256).split('\x00', 1)[0]
+        self.parameters_nev['Comments'] = filehandle.read(256).decode('UTF-8').split('\x00', 1)[0]
 
         # Read number of extended headers
         # unsigned long 32bit, little endian
@@ -529,28 +530,28 @@ class BlackrockIO(BaseIO):
         '''
 
         # Initialize dictionary to hold electrode information...
-        self.parameters_nev_electrodes = [ {} for dummy in xrange(256) ]
+        self.parameters_nev_electrodes = [ {} for dummy in range(256) ]
         # ...and the number of byte per spike waveform sample, default to 1
         self.__byte_per_waveform_sample = 256 * [ 1 ]
 
         for _ext_block_i in range(0, self.__num_ext_header):
             # Read extended header block ID
-            fileextheader = filehandle.read(8)
+            fileextheader = filehandle.read(8).decode('UTF-8')
             if fileextheader == 'ARRAYNME':
                 # Read name of electrode array and remove 0's
-                self.parameters_nev['ArrayName'] = filehandle.read(24).replace('\x00', '')
+                self.parameters_nev['ArrayName'] = filehandle.read(24).decode('UTF-8').replace('\x00', '')
 
             elif fileextheader == 'ECOMMENT':
                 # Read extended comment and remove 0's
-                self.parameters_nev['ExtendedComment'] = filehandle.read(24).replace('\x00', '')
+                self.parameters_nev['ExtendedComment'] = filehandle.read(24).decode('UTF-8').replace('\x00', '')
 
             elif fileextheader == 'CCOMMENT':
                 # Read continued comment and remove 0's
-                self.parameters_nev["ExtendedComment"] = self.parameters_nev['ExtendedComment'] + filehandle.read(24).replace('\x00', '')
+                self.parameters_nev["ExtendedComment"] = self.parameters_nev['ExtendedComment'] + filehandle.read(24).decode('UTF-8').replace('\x00', '')
 
             elif fileextheader == 'MAPFILE':
                 # Read file name of map file and remove 0's
-                self.parameters_nev["MapFile"] = filehandle.read(24).replace('\x00', '')
+                self.parameters_nev["MapFile"] = filehandle.read(24).decode('UTF-8').replace('\x00', '')
 
             elif fileextheader == 'NEUEVWAV':
                 # Read electrode number
@@ -691,7 +692,7 @@ class BlackrockIO(BaseIO):
             else:
                 self._diagnostic_print("Header ID " + fileextheader +
                     " is not known.")
-                filehandle.read(24)
+                filehandle.read(24).decode('UTF-8')
 
     def _associate(self, sessionname, nsx_override=None, nev_override=None):
         """
@@ -869,7 +870,7 @@ class BlackrockIO(BaseIO):
 
             # Pre-read buffer for faster input
             filehandle.seek(self.__file_nev_ext_header_end_pos, os.SEEK_SET)
-            filebuffer = filehandle.read(self.__packet_bytes * self.__num_packets_nev)
+            filebuffer = filehandle.read(int(self.__packet_bytes * self.__num_packets_nev))
 
             # Read packets. The byte structure is
             # "<IHBBHhhhhh" + str(self.__packet_bytes - 20) + "s"
@@ -892,17 +893,17 @@ class BlackrockIO(BaseIO):
             #
             # All arrays are converted to dtype 'int', which makes subsequent operations considerably faster,
             # at the cost of slightly increased memory usage.
-            buf = np.frombuffer(filebuffer, count=-1, dtype='<I').reshape((self.__num_packets_nev, self.__packet_bytes / 4), order='C')
+            buf = np.frombuffer(filebuffer, count=-1, dtype='<I').reshape((int(self.__num_packets_nev), int(self.__packet_bytes / 4)), order='C')
             self._event_timestamps = buf[:, 0].astype('int')
 
-            buf = np.frombuffer(filebuffer, count=-1, dtype='<H').reshape((self.__num_packets_nev, self.__packet_bytes / 2), order='C')
+            buf = np.frombuffer(filebuffer, count=-1, dtype='<H').reshape((int(self.__num_packets_nev), int(self.__packet_bytes / 2)), order='C')
             self._event_packet_id = buf[:, 2].astype('int')
             self._event_digital_marker = buf[:, 4].astype('int')
 
-            buf = np.frombuffer(filebuffer, count=-1, dtype='<h').reshape((self.__num_packets_nev, self.__packet_bytes / 2), order='C')
+            buf = np.frombuffer(filebuffer, count=-1, dtype='<h').reshape((int(self.__num_packets_nev), int(self.__packet_bytes / 2)), order='C')
             self._event_analog_marker = buf[:, 5:10].astype('int')
 
-            buf = np.frombuffer(filebuffer, count=-1, dtype='<B').reshape((self.__num_packets_nev, self.__packet_bytes), order='C')
+            buf = np.frombuffer(filebuffer, count=-1, dtype='<B').reshape((int(self.__num_packets_nev), int(self.__packet_bytes)), order='C')
             self._event_class_or_reason = buf[:, 6].astype('int')
 
 
@@ -934,13 +935,13 @@ class BlackrockIO(BaseIO):
 
             # Save color values of comments
             self._comment_rgba_color = {}
-            buf = np.frombuffer(filebuffer, count=-1, dtype='<I').reshape((self.__num_packets_nev, self.__packet_bytes / 4), order='C')
+            buf = np.frombuffer(filebuffer, count=-1, dtype='<I').reshape((int(self.__num_packets_nev), int(self.__packet_bytes / 4)), order='C')
             for marker_idx in self._comment_index:
                 self._comment_rgba_color[marker_idx] = buf[marker_idx, 2].astype('int')
 
             # Save actual comments
             self._comment = {}
-            buf = np.frombuffer(filebuffer, count=-1, dtype='<B').reshape((self.__num_packets_nev, self.__packet_bytes), order='C')
+            buf = np.frombuffer(filebuffer, count=-1, dtype='<B').reshape((int(self.__num_packets_nev), int(self.__packet_bytes)), order='C')
 
             for marker_idx in self._comment_index:
                 charset = buf[marker_idx, 6]
@@ -1298,7 +1299,7 @@ class BlackrockIO(BaseIO):
         if channel_list is None:
             channel_list = []
 
-        if type(channel_list) != list:
+        if not hasattr(channel_list , '__iter__'):
             raise ValueError('Invalid specification of channel_list.')
 
         # Make sure the requested .nsX file exists
@@ -1580,7 +1581,7 @@ class BlackrockIO(BaseIO):
                                         analog_channel=0)
                     seg[seg_i].eventarrays.append(ev)
 
-                for analog_channel_i in xrange(5):
+                for analog_channel_i in range(5):
                     for marker_i in self._analog_marker_ids[analog_channel_i]:
                         # Extract all time stamps of analog markers in channel analog_channel_i
                         marker_idx = self._analog_marker_index[analog_channel_i][np.logical_and(self._event_analog_marker[analog_channel_i][self._analog_marker_index[analog_channel_i]] == marker_i, t_idx[seg_i][self._analog_marker_index[analog_channel_i]])]
@@ -1649,7 +1650,7 @@ class BlackrockIO(BaseIO):
             # Explicitely mention the number of bytes to read from the
             # file using count=... because we disregard the last sample
             # point (see definition of self.__num_packets_nsx above)
-            analogbuf = np.memmap(filename_nsx, dtype='<h', mode='r', offset=fileoffset, shape=(self.__num_packets_nsx[nsx_i], self.num_channels_nsx[nsx_i]))
+            analogbuf = np.memmap(filename_nsx, dtype='<h', mode='r', offset=fileoffset, shape=(int(self.__num_packets_nsx[nsx_i]), int(self.num_channels_nsx[nsx_i])))
 
             # Go through all time periods
             for (seg_i, n_start_i, n_stop_i) in zip(range(len(n_starts)), n_starts, n_stops):
@@ -1705,8 +1706,8 @@ class BlackrockIO(BaseIO):
                             factor -- data is dimensionless.")
 
                     if not lazy:
-                        data = pq.Quantity(analogbuf[start_packet:end_packet,
-                            el_idx_i].T, units=LFPunit)
+                        data = pq.Quantity(analogbuf[int(start_packet):int(end_packet),
+                            int(el_idx_i)].T, units=LFPunit)
                     else:
                         data = pq.Quantity([], units=LFPunit)
 
