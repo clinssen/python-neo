@@ -411,7 +411,7 @@ class NeoHdf5IO(BaseIO):
 
                     if hasattr(obj_attr, "dimensionality"):
                         for un in obj_attr.dimensionality.items():
-                            new_arr._f_setAttr("unit__" + un[0].name, un[1])
+                            new_arr._f_setattr("unit__" + un[0].name, un[1])
                     try:
                         self._data.remove_node(path, attr_name)
                     except:
