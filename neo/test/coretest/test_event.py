@@ -3,13 +3,13 @@
 Tests of the neo.core.event.Event class
 """
 
-try:
-    import unittest2 as unittest
-except ImportError:
-    import unittest
+import unittest
 
 import numpy as np
 import quantities as pq
+import pickle
+import os
+from numpy.testing import assert_array_equal
 
 try:
     from IPython.lib.pretty import pretty
@@ -21,7 +21,9 @@ else:
 from neo.core.event import Event
 from neo.core import Segment
 from neo.test.tools import (assert_neo_object_is_compliant,
-                            assert_arrays_equal, assert_same_sub_schema)
+                            assert_arrays_equal,
+                            assert_arrays_almost_equal,
+                            assert_same_sub_schema)
 from neo.test.generate_datasets import (get_fake_value, get_fake_values,
                                         fake_neo, TEST_ANNOTATIONS)
 
@@ -90,7 +92,7 @@ class Test__generate_datasets(unittest.TestCase):
 class TestEvent(unittest.TestCase):
     def test_Event_creation(self):
         params = {'test2': 'y1', 'test3': True}
-        evt = Event([1.1, 1.5, 1.7]*pq.ms,
+        evt = Event([1.1, 1.5, 1.7] * pq.ms,
                     labels=np.array(['test event 1',
                                      'test event 2',
                                      'test event 3'], dtype='S'),
@@ -100,7 +102,7 @@ class TestEvent(unittest.TestCase):
         evt.annotate(test1=1.1, test0=[1, 2])
         assert_neo_object_is_compliant(evt)
 
-        assert_arrays_equal(evt.times, [1.1, 1.5, 1.7]*pq.ms)
+        assert_arrays_equal(evt.times, [1.1, 1.5, 1.7] * pq.ms)
         assert_arrays_equal(evt.labels, np.array(['test event 1',
                                                   'test event 2',
                                                   'test event 3'], dtype='S'))
@@ -112,9 +114,161 @@ class TestEvent(unittest.TestCase):
         self.assertEqual(evt.annotations['test2'], 'y1')
         self.assertTrue(evt.annotations['test3'])
 
+    def tests_time_slice(self):
+        params = {'test2': 'y1', 'test3': True}
+        evt = Event([0.1, 0.5, 1.1, 1.5, 1.7, 2.2, 2.9, 3.0, 3.1, 3.3] * pq.ms,
+                    name='test', description='tester',
+                    file_origin='test.file',
+                    test1=1, **params)
+        evt.annotate(test1=1.1, test0=[1, 2])
+        assert_neo_object_is_compliant(evt)
+
+        targ = Event([2.2, 2.9, 3.0] * pq.ms)
+        result = evt.time_slice(t_start=2.0, t_stop=3.0)
+
+        assert_arrays_equal(targ, result)
+        self.assertEqual(evt.name, result.name)
+        self.assertEqual(evt.description, result.description)
+        self.assertEqual(evt.file_origin, result.file_origin)
+        self.assertEqual(evt.annotations['test0'], result.annotations['test0'])
+        self.assertEqual(evt.annotations['test1'], result.annotations['test1'])
+        self.assertEqual(evt.annotations['test2'], result.annotations['test2'])
+
+    def test_time_slice_out_of_boundries(self):
+        params = {'test2': 'y1', 'test3': True}
+        evt = Event([0.1, 0.5, 1.1, 1.5, 1.7, 2.2, 2.9, 3.0, 3.1, 3.3] * pq.ms,
+                    name='test', description='tester',
+                    file_origin='test.file',
+                    test1=1, **params)
+        evt.annotate(test1=1.1, test0=[1, 2])
+        assert_neo_object_is_compliant(evt)
+
+        targ = evt
+        result = evt.time_slice(t_start=0.0001, t_stop=30.0)
+
+        assert_arrays_equal(targ, result)
+        self.assertEqual(evt.name, result.name)
+        self.assertEqual(evt.description, result.description)
+        self.assertEqual(evt.file_origin, result.file_origin)
+        self.assertEqual(evt.annotations['test0'], result.annotations['test0'])
+        self.assertEqual(evt.annotations['test1'], result.annotations['test1'])
+        self.assertEqual(evt.annotations['test2'], result.annotations['test2'])
+
+    def test_time_slice_empty(self):
+        params = {'test2': 'y1', 'test3': True}
+        evt = Event([] * pq.ms,
+                    name='test', description='tester',
+                    file_origin='test.file',
+                    test1=1, **params)
+        evt.annotate(test1=1.1, test0=[1, 2])
+        result = evt.time_slice(t_start=0.0001, t_stop=30.0)
+        assert_neo_object_is_compliant(evt)
+
+        assert_arrays_equal(evt, result)
+        self.assertEqual(evt.name, result.name)
+        self.assertEqual(evt.description, result.description)
+        self.assertEqual(evt.file_origin, result.file_origin)
+        self.assertEqual(evt.annotations['test0'], result.annotations['test0'])
+        self.assertEqual(evt.annotations['test1'], result.annotations['test1'])
+        self.assertEqual(evt.annotations['test2'], result.annotations['test2'])
+
+    def test_time_slice_none_stop(self):
+        params = {'test2': 'y1', 'test3': True}
+        evt = Event([0.1, 0.5, 1.1, 1.5, 1.7, 2.2, 2.9, 3.0, 3.1, 3.3] * pq.ms,
+                    name='test', description='tester',
+                    file_origin='test.file',
+                    test1=1, **params)
+        evt.annotate(test1=1.1, test0=[1, 2])
+        targ = Event([2.2, 2.9, 3.0, 3.1, 3.3] * pq.ms)
+        assert_neo_object_is_compliant(evt)
+
+        t_start = 2.0
+        t_stop = None
+        result = evt.time_slice(t_start, t_stop)
+
+        assert_arrays_equal(targ, result)
+        self.assertEqual(evt.name, result.name)
+        self.assertEqual(evt.description, result.description)
+        self.assertEqual(evt.file_origin, result.file_origin)
+        self.assertEqual(evt.annotations['test0'], result.annotations['test0'])
+        self.assertEqual(evt.annotations['test1'], result.annotations['test1'])
+        self.assertEqual(evt.annotations['test2'], result.annotations['test2'])
+
+    def test_time_slice_none_start(self):
+        params = {'test2': 'y1', 'test3': True}
+        evt = Event([0.1, 0.5, 1.1, 1.5, 1.7, 2.2, 2.9, 3.0, 3.1, 3.3] * pq.ms,
+                    name='test', description='tester',
+                    file_origin='test.file',
+                    test1=1, **params)
+        evt.annotate(test1=1.1, test0=[1, 2])
+        assert_neo_object_is_compliant(evt)
+
+        targ = Event([0.1, 0.5, 1.1, 1.5, 1.7, 2.2, 2.9, 3.0] * pq.ms)
+        t_start = None
+        t_stop = 3.0
+        result = evt.time_slice(t_start, t_stop)
+
+        assert_arrays_equal(targ, result)
+        self.assertEqual(evt.name, result.name)
+        self.assertEqual(evt.description, result.description)
+        self.assertEqual(evt.file_origin, result.file_origin)
+        self.assertEqual(evt.annotations['test0'], result.annotations['test0'])
+        self.assertEqual(evt.annotations['test1'], result.annotations['test1'])
+        self.assertEqual(evt.annotations['test2'], result.annotations['test2'])
+
+    def test_time_slice_none_both(self):
+        params = {'test2': 'y1', 'test3': True}
+        evt = Event([0.1, 0.5, 1.1, 1.5, 1.7, 2.2, 2.9, 3.0, 3.1, 3.3] * pq.ms,
+                    name='test', description='tester',
+                    file_origin='test.file',
+                    test1=1, **params)
+        assert_neo_object_is_compliant(evt)
+
+        evt.annotate(test1=1.1, test0=[1, 2])
+        t_start = None
+        t_stop = None
+        result = evt.time_slice(t_start, t_stop)
+
+        assert_arrays_equal(evt, result)
+        self.assertEqual(evt.name, result.name)
+        self.assertEqual(evt.description, result.description)
+        self.assertEqual(evt.file_origin, result.file_origin)
+        self.assertEqual(evt.annotations['test0'], result.annotations['test0'])
+        self.assertEqual(evt.annotations['test1'], result.annotations['test1'])
+        self.assertEqual(evt.annotations['test2'], result.annotations['test2'])
+
+    def test_time_slice_differnt_units(self):
+        params = {'test2': 'y1', 'test3': True}
+        evt = Event([0.1, 0.5, 1.1, 1.5, 1.7, 2.2, 2.9, 3.1, 3.3] * pq.ms,
+                    name='test', description='tester',
+                    file_origin='test.file',
+                    test1=1, **params)
+        assert_neo_object_is_compliant(evt)
+        evt.annotate(test1=1.1, test0=[1, 2])
+
+        targ = Event([2.2, 2.9] * pq.ms,
+                     name='test', description='tester',
+                     file_origin='test.file',
+                     test1=1, **params)
+        assert_neo_object_is_compliant(targ)
+        targ.annotate(test1=1.1, test0=[1, 2])
+
+        t_start = 0.002 * pq.s
+        t_stop = 0.003 * pq.s
+
+        result = evt.time_slice(t_start, t_stop)
+
+        assert_arrays_equal(targ, result)
+        self.assertEqual(targ.name, result.name)
+        self.assertEqual(targ.description, result.description)
+        self.assertEqual(targ.file_origin, result.file_origin)
+        self.assertEqual(targ.annotations['test0'], result.annotations['test0'])
+        self.assertEqual(targ.annotations['test1'], result.annotations['test1'])
+        self.assertEqual(targ.annotations['test2'], result.annotations['test2'])
+
     def test_Event_repr(self):
         params = {'test2': 'y1', 'test3': True}
-        evt = Event([1.1, 1.5, 1.7]*pq.ms,
+        evt = Event([1.1, 1.5, 1.7] * pq.ms,
                     labels=np.array(['test event 1',
                                      'test event 2',
                                      'test event 3'], dtype='S'),
@@ -137,21 +291,21 @@ class TestEvent(unittest.TestCase):
         paramstarg = {'test2': 'yes;no',
                       'test3': True,
                       'test4': False}
-        evt1 = Event([1.1, 1.5, 1.7]*pq.ms,
+        evt1 = Event([1.1, 1.5, 1.7] * pq.ms,
                      labels=np.array(['test event 1 1',
                                       'test event 1 2',
                                       'test event 1 3'], dtype='S'),
                      name='test', description='tester 1',
                      file_origin='test.file',
                      test1=1, **params1)
-        evt2 = Event([2.1, 2.5, 2.7]*pq.us,
+        evt2 = Event([2.1, 2.5, 2.7] * pq.us,
                      labels=np.array(['test event 2 1',
                                       'test event 2 2',
                                       'test event 2 3'], dtype='S'),
                      name='test', description='tester 2',
                      file_origin='test.file',
                      test1=1, **params2)
-        evttarg = Event([1.1, 1.5, 1.7, .0021, .0025, .0027]*pq.ms,
+        evttarg = Event([1.1, 1.5, 1.7, .0021, .0025, .0027] * pq.ms,
                         labels=np.array(['test event 1 1',
                                          'test event 1 2',
                                          'test event 1 3',
@@ -172,7 +326,7 @@ class TestEvent(unittest.TestCase):
 
     def test__children(self):
         params = {'test2': 'y1', 'test3': True}
-        evt = Event([1.1, 1.5, 1.7]*pq.ms,
+        evt = Event([1.1, 1.5, 1.7] * pq.ms,
                     labels=np.array(['test event 1',
                                      'test event 2',
                                      'test event 3'], dtype='S'),
@@ -202,7 +356,7 @@ class TestEvent(unittest.TestCase):
 
     @unittest.skipUnless(HAVE_IPYTHON, "requires IPython")
     def test__pretty(self):
-        evt = Event([1.1, 1.5, 1.7]*pq.ms,
+        evt = Event([1.1, 1.5, 1.7] * pq.ms,
                     labels=np.array(['test event 1',
                                      'test event 2',
                                      'test event 3'], dtype='S'),
@@ -216,6 +370,69 @@ class TestEvent(unittest.TestCase):
                 (evt.name, evt.description, pretty(evt.annotations)))
 
         self.assertEqual(prepr, targ)
+
+    def test__time_slice(self):
+        data = [2, 3, 4, 5] * pq.ms
+        evt = Event(data, foo='bar')
+
+        evt1 = evt.time_slice(2.2 * pq.ms, 4.2 * pq.ms)
+        assert_arrays_equal(evt1.times, [3, 4] * pq.ms)
+        self.assertEqual(evt.annotations, evt1.annotations)
+
+        evt2 = evt.time_slice(None, 4.2 * pq.ms)
+        assert_arrays_equal(evt2.times, [2, 3, 4] * pq.ms)
+
+        evt3 = evt.time_slice(2.2 * pq.ms, None)
+        assert_arrays_equal(evt3.times, [3, 4, 5] * pq.ms)
+
+    def test_as_array(self):
+        data = [2, 3, 4, 5]
+        evt = Event(data * pq.ms)
+        evt_as_arr = evt.as_array()
+        self.assertIsInstance(evt_as_arr, np.ndarray)
+        assert_array_equal(data, evt_as_arr)
+
+    def test_as_quantity(self):
+        data = [2, 3, 4, 5]
+        evt = Event(data * pq.ms)
+        evt_as_q = evt.as_quantity()
+        self.assertIsInstance(evt_as_q, pq.Quantity)
+        assert_array_equal(data * pq.ms, evt_as_q)
+
+
+class TestDuplicateWithNewData(unittest.TestCase):
+    def setUp(self):
+        self.data = np.array([0.1, 0.5, 1.2, 3.3, 6.4, 7])
+        self.dataquant = self.data * pq.ms
+        self.event = Event(self.dataquant)
+
+    def test_duplicate_with_new_data(self):
+        signal1 = self.event
+        new_data = np.sort(np.random.uniform(0, 100, (self.event.size))) * pq.ms
+        signal1b = signal1.duplicate_with_new_data(new_data)
+        assert_arrays_almost_equal(np.asarray(signal1b),
+                                   np.asarray(new_data), 1e-12)
+
+
+class TestEventFunctions(unittest.TestCase):
+
+    def test__pickle(self):
+
+        event1 = Event(np.arange(0, 30, 10) * pq.s, labels=np.array(['t0', 't1', 't2'], dtype='S'),
+                       units='s')
+        fobj = open('./pickle', 'wb')
+        pickle.dump(event1, fobj)
+        fobj.close()
+
+        fobj = open('./pickle', 'rb')
+        try:
+            event2 = pickle.load(fobj)
+        except ValueError:
+            event2 = None
+
+        fobj.close()
+        assert_array_equal(event1.times, event2.times)
+        os.remove('./pickle')
 
 
 if __name__ == "__main__":

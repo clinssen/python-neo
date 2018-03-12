@@ -20,11 +20,12 @@ the old object.
 
 # needed for python 3 compatibility
 from __future__ import absolute_import, division, print_function
+import sys
 
+import copy
 import numpy as np
 import quantities as pq
-
-from neo.core.baseneo import BaseNeo
+from neo.core.baseneo import BaseNeo, MergeError, merge_annotations
 
 
 def check_has_dimensions_time(*values):
@@ -53,6 +54,9 @@ def _check_time_in_range(value, t_start, t_stop, view=False):
     certain that the dtype and units are the same
     '''
 
+    if t_start > t_stop:
+        raise ValueError("t_stop (%s) is before t_start (%s)" % (t_stop, t_start))
+
     if not value.size:
         return
 
@@ -69,20 +73,43 @@ def _check_time_in_range(value, t_start, t_stop, view=False):
                          (value, t_stop))
 
 
+def _check_waveform_dimensions(spiketrain):
+    '''
+    Verify that waveform is compliant with the waveform definition as
+    quantity array 3D (spike, channel_index, time)
+    '''
+
+    if not spiketrain.size:
+        return
+
+    waveforms = spiketrain.waveforms
+
+    if (waveforms is None) or (not waveforms.size):
+        return
+
+    if waveforms.shape[0] != len(spiketrain):
+        raise ValueError("Spiketrain length (%s) does not match to number of "
+                         "waveforms present (%s)" % (len(spiketrain),
+                                                     waveforms.shape[0]))
+
+
 def _new_spiketrain(cls, signal, t_stop, units=None, dtype=None,
                     copy=True, sampling_rate=1.0 * pq.Hz,
                     t_start=0.0 * pq.s, waveforms=None, left_sweep=None,
                     name=None, file_origin=None, description=None,
-                    annotations=None):
+                    annotations=None, segment=None, unit=None):
     '''
     A function to map :meth:`BaseAnalogSignal.__new__` to function that
     does not do the unit checking. This is needed for :module:`pickle` to work.
     '''
     if annotations is None:
         annotations = {}
-    return SpikeTrain(signal, t_stop, units, dtype, copy, sampling_rate,
-                      t_start, waveforms, left_sweep, name, file_origin,
-                      description, **annotations)
+    obj = SpikeTrain(signal, t_stop, units, dtype, copy, sampling_rate,
+                     t_start, waveforms, left_sweep, name, file_origin,
+                     description, **annotations)
+    obj.segment = segment
+    obj.unit = unit
+    return obj
 
 
 class SpikeTrain(BaseNeo, pq.Quantity):
@@ -148,7 +175,7 @@ class SpikeTrain(BaseNeo, pq.Quantity):
             Must be True when you request a change of units or dtype.
 
     Note: Any other additional arguments are assumed to be user-specific
-            metadata and stored in :attr:`annotations`.
+    metadata and stored in :attr:`annotations`.
 
     *Properties available on this object*:
         :sampling_period: (quantity scalar) Interval between two samples.
@@ -161,8 +188,7 @@ class SpikeTrain(BaseNeo, pq.Quantity):
         :right_sweep: (quantity scalar) Time from the trigger times of the
             spikes to the end of the waveforms, read-only.
             (:attr:`left_sweep` + :attr:`spike_duration`)
-        :times: (:class:`SpikeTrain`) Returns the :class:`SpikeTrain` without
-            modification or copying.
+        :times: (quantity array 1D) Returns the :class:`SpikeTrain` as a quantity array.
 
     *Slicing*:
         :class:`SpikeTrain` objects can be sliced. When this occurs, a new
@@ -176,8 +202,8 @@ class SpikeTrain(BaseNeo, pq.Quantity):
     _single_parent_objects = ('Segment', 'Unit')
     _quantity_attr = 'times'
     _necessary_attrs = (('times', pq.Quantity, 1),
-                       ('t_start', pq.Quantity, 0),
-                       ('t_stop', pq.Quantity, 0))
+                        ('t_start', pq.Quantity, 0),
+                        ('t_stop', pq.Quantity, 0))
     _recommended_attrs = ((('waveforms', pq.Quantity, 3),
                            ('left_sweep', pq.Quantity, 0),
                            ('sampling_rate', pq.Quantity, 0)) +
@@ -193,6 +219,12 @@ class SpikeTrain(BaseNeo, pq.Quantity):
         This is called whenever a new :class:`SpikeTrain` is created from the
         constructor, but not when slicing.
         '''
+        if len(times) != 0 and waveforms is not None and len(times) != \
+                waveforms.shape[0]:
+            # len(times)!=0 has been used to workaround a bug occuring during neo import
+            raise ValueError(
+                "the number of waveforms should be equal to the number of spikes")
+
         # Make sure units are consistent
         # also get the dimensionality now since it is much faster to feed
         # that to Quantity rather than a unit
@@ -278,7 +310,7 @@ class SpikeTrain(BaseNeo, pq.Quantity):
 
         return obj
 
-    def __init__(self, times, t_stop, units=None,  dtype=np.float,
+    def __init__(self, times, t_stop, units=None, dtype=np.float,
                  copy=True, sampling_rate=1.0 * pq.Hz, t_start=0.0 * pq.s,
                  waveforms=None, left_sweep=None, name=None, file_origin=None,
                  description=None, **annotations):
@@ -303,12 +335,15 @@ class SpikeTrain(BaseNeo, pq.Quantity):
         if self.dimensionality == pq.quantity.validate_dimensionality(units):
             return self.copy()
         spikes = self.view(pq.Quantity)
-        return SpikeTrain(times=spikes, t_stop=self.t_stop, units=units,
-                          sampling_rate=self.sampling_rate,
-                          t_start=self.t_start, waveforms=self.waveforms,
-                          left_sweep=self.left_sweep, name=self.name,
-                          file_origin=self.file_origin,
-                          description=self.description, **self.annotations)
+        obj = SpikeTrain(times=spikes, t_stop=self.t_stop, units=units,
+                         sampling_rate=self.sampling_rate,
+                         t_start=self.t_start, waveforms=self.waveforms,
+                         left_sweep=self.left_sweep, name=self.name,
+                         file_origin=self.file_origin,
+                         description=self.description, **self.annotations)
+        obj.segment = self.segment
+        obj.unit = self.unit
+        return obj
 
     def __reduce__(self):
         '''
@@ -321,7 +356,7 @@ class SpikeTrain(BaseNeo, pq.Quantity):
                                  self.sampling_rate, self.t_start,
                                  self.waveforms, self.left_sweep,
                                  self.name, self.file_origin, self.description,
-                                 self.annotations)
+                                 self.annotations, self.segment, self.unit)
 
     def __array_finalize__(self, obj):
         '''
@@ -359,7 +394,7 @@ class SpikeTrain(BaseNeo, pq.Quantity):
         self.unit = getattr(obj, 'unit', None)
 
         # The additional arguments
-        self.annotations = getattr(obj, 'annotations', None)
+        self.annotations = getattr(obj, 'annotations', {})
 
         # Globally recommended attributes
         self.name = getattr(obj, 'name', None)
@@ -368,6 +403,22 @@ class SpikeTrain(BaseNeo, pq.Quantity):
 
         if hasattr(obj, 'lazy_shape'):
             self.lazy_shape = obj.lazy_shape
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        new_st = cls(np.array(self), self.t_stop, units=self.units,
+                     dtype=self.dtype, copy=True, sampling_rate=self.sampling_rate,
+                     t_start=self.t_start, waveforms=self.waveforms,
+                     left_sweep=self.left_sweep, name=self.name,
+                     file_origin=self.file_origin, description=self.description)
+        new_st.__dict__.update(self.__dict__)
+        memo[id(self)] = new_st
+        for k, v in self.__dict__.items():
+            try:
+                setattr(new_st, k, copy.deepcopy(v, memo))
+            except TypeError:
+                setattr(new_st, k, v)
+        return new_st
 
     def __repr__(self):
         '''
@@ -397,16 +448,43 @@ class SpikeTrain(BaseNeo, pq.Quantity):
 
         Doesn't get called in Python 3, :meth:`__getitem__` is called instead
         '''
-        # first slice the Quantity array
-        obj = super(SpikeTrain, self).__getslice__(i, j)
-        # somehow this knows to call SpikeTrain.__array_finalize__, though
-        # I'm not sure how. (If you know, please add an explanatory comment
-        # here.) That copies over all of the metadata.
+        return self.__getitem__(slice(i, j))
 
-        # update waveforms
-        if obj.waveforms is not None:
-            obj.waveforms = obj.waveforms[i:j]
-        return obj
+    def __add__(self, time):
+        '''
+        Shifts the time point of all spikes by adding the amount in
+        :attr:`time` (:class:`Quantity`)
+
+        Raises an exception if new time points fall outside :attr:`t_start` or
+        :attr:`t_stop`
+        '''
+        spikes = self.view(pq.Quantity)
+        check_has_dimensions_time(time)
+        _check_time_in_range(spikes + time, self.t_start, self.t_stop)
+        return SpikeTrain(times=spikes + time, t_stop=self.t_stop,
+                          units=self.units, sampling_rate=self.sampling_rate,
+                          t_start=self.t_start, waveforms=self.waveforms,
+                          left_sweep=self.left_sweep, name=self.name,
+                          file_origin=self.file_origin,
+                          description=self.description, **self.annotations)
+
+    def __sub__(self, time):
+        '''
+        Shifts the time point of all spikes by subtracting the amount in
+        :attr:`time` (:class:`Quantity`)
+
+        Raises an exception if new time points fall outside :attr:`t_start` or
+        :attr:`t_stop`
+        '''
+        spikes = self.view(pq.Quantity)
+        check_has_dimensions_time(time)
+        _check_time_in_range(spikes - time, self.t_start, self.t_stop)
+        return SpikeTrain(times=spikes - time, t_stop=self.t_stop,
+                          units=self.units, sampling_rate=self.sampling_rate,
+                          t_start=self.t_start, waveforms=self.waveforms,
+                          left_sweep=self.left_sweep, name=self.name,
+                          file_origin=self.file_origin,
+                          description=self.description, **self.annotations)
 
     def __getitem__(self, i):
         '''
@@ -435,6 +513,44 @@ class SpikeTrain(BaseNeo, pq.Quantity):
         _check_time_in_range(value, self.t_start, self.t_stop)
         super(SpikeTrain, self).__setslice__(i, j, value)
 
+    def _copy_data_complement(self, other, deep_copy=False):
+        '''
+        Copy the metadata from another :class:`SpikeTrain`.
+        '''
+        for attr in ("left_sweep", "sampling_rate", "name", "file_origin",
+                     "description", "annotations"):
+            attr_value = getattr(other, attr, None)
+            if deep_copy:
+                attr_value = copy.deepcopy(attr_value)
+            setattr(self, attr, attr_value)
+
+    def duplicate_with_new_data(self, signal, t_start=None, t_stop=None,
+                                waveforms=None, deep_copy=True):
+        '''
+        Create a new :class:`SpikeTrain` with the same metadata
+        but different data (times, t_start, t_stop)
+        '''
+        # using previous t_start and t_stop if no values are provided
+        if t_start is None:
+            t_start = self.t_start
+        if t_stop is None:
+            t_stop = self.t_stop
+        if waveforms is None:
+            waveforms = self.waveforms
+
+        new_st = self.__class__(signal, t_start=t_start, t_stop=t_stop,
+                                waveforms=waveforms, units=self.units)
+        new_st._copy_data_complement(self, deep_copy=deep_copy)
+
+        # overwriting t_start and t_stop with new values
+        new_st.t_start = t_start
+        new_st.t_stop = t_stop
+
+        # consistency check
+        _check_time_in_range(new_st, new_st.t_start, new_st.t_stop, view=False)
+        _check_waveform_dimensions(new_st)
+        return new_st
+
     def time_slice(self, t_start, t_stop):
         '''
         Creates a new :class:`SpikeTrain` corresponding to the time slice of
@@ -458,12 +574,76 @@ class SpikeTrain(BaseNeo, pq.Quantity):
 
         return new_st
 
+    def merge(self, other):
+        '''
+        Merge another :class:`SpikeTrain` into this one.
+
+        The times of the :class:`SpikeTrain` objects combined in one array
+        and sorted.
+
+        If the attributes of the two :class:`SpikeTrain` are not
+        compatible, an Exception is raised.
+        '''
+        if self.sampling_rate != other.sampling_rate:
+            raise MergeError("Cannot merge, different sampling rates")
+        if self.t_start != other.t_start:
+            raise MergeError("Cannot merge, different t_start")
+        if self.t_stop != other.t_stop:
+            raise MemoryError("Cannot merge, different t_stop")
+        if self.left_sweep != other.left_sweep:
+            raise MemoryError("Cannot merge, different left_sweep")
+        if self.segment != other.segment:
+            raise MergeError("Cannot merge these two signals as they belong to"
+                             " different segments.")
+        if hasattr(self, "lazy_shape"):
+            if hasattr(other, "lazy_shape"):
+                merged_lazy_shape = (self.lazy_shape[0] + other.lazy_shape[0])
+            else:
+                raise MergeError("Cannot merge a lazy object with a real"
+                                 " object.")
+        if other.units != self.units:
+            other = other.rescale(self.units)
+        wfs = [self.waveforms is not None, other.waveforms is not None]
+        if any(wfs) and not all(wfs):
+            raise MergeError("Cannot merge signal with waveform and signal "
+                             "without waveform.")
+        stack = np.concatenate((np.asarray(self), np.asarray(other)))
+        sorting = np.argsort(stack)
+        stack = stack[sorting]
+        kwargs = {}
+        for name in ("name", "description", "file_origin"):
+            attr_self = getattr(self, name)
+            attr_other = getattr(other, name)
+            if attr_self == attr_other:
+                kwargs[name] = attr_self
+            else:
+                kwargs[name] = "merge(%s, %s)" % (attr_self, attr_other)
+        merged_annotations = merge_annotations(self.annotations,
+                                               other.annotations)
+        kwargs.update(merged_annotations)
+        train = SpikeTrain(stack, units=self.units, dtype=self.dtype,
+                           copy=False, t_start=self.t_start,
+                           t_stop=self.t_stop,
+                           sampling_rate=self.sampling_rate,
+                           left_sweep=self.left_sweep, **kwargs)
+        if all(wfs):
+            wfs_stack = np.vstack((self.waveforms, other.waveforms))
+            wfs_stack = wfs_stack[sorting]
+            train.waveforms = wfs_stack
+        train.segment = self.segment
+        if train.segment is not None:
+            self.segment.spiketrains.append(train)
+
+        if hasattr(self, "lazy_shape"):
+            train.lazy_shape = merged_lazy_shape
+        return train
+
     @property
     def times(self):
         '''
-        Returns the :class:`SpikeTrain` without modification or copying.
+        Returns the :class:`SpikeTrain` as a quantity array.
         '''
-        return self
+        return pq.Quantity(self)
 
     @property
     def duration(self):
@@ -519,3 +699,20 @@ class SpikeTrain(BaseNeo, pq.Quantity):
         if self.left_sweep is None or dur is None:
             return None
         return self.left_sweep + dur
+
+    def as_array(self, units=None):
+        """
+        Return the spike times as a plain NumPy array.
+
+        If `units` is specified, first rescale to those units.
+        """
+        if units:
+            return self.rescale(units).magnitude
+        else:
+            return self.magnitude
+
+    def as_quantity(self):
+        """
+        Return the spike times as a quantities array.
+        """
+        return self.view(pq.Quantity)

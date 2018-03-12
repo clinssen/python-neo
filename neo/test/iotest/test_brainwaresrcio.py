@@ -10,16 +10,13 @@ import logging
 import os.path
 import sys
 
-try:
-    import unittest2 as unittest
-except ImportError:
-    import unittest
+import unittest
 
 import numpy as np
 import quantities as pq
 
 from neo.core import (Block, Event,
-                      RecordingChannelGroup, Segment, SpikeTrain, Unit)
+                      ChannelIndex, Segment, SpikeTrain, Unit)
 from neo.io import BrainwareSrcIO, brainwaresrcio
 from neo.test.iotest.common_io_test import BaseTestIO
 from neo.test.tools import (assert_same_sub_schema,
@@ -73,7 +70,7 @@ def proc_src(filename):
     with np.load(filename) as srcobj:
         srcfile = srcobj.items()[0][1]
 
-    filename = os.path.basename(filename[:-12]+'.src')
+    filename = os.path.basename(filename[:-12] + '.src')
 
     block = Block(file_origin=filename)
 
@@ -84,12 +81,12 @@ def proc_src(filename):
     comm_seg = proc_src_comments(srcfile, filename)
     block.segments.append(comm_seg)
 
-    rcg = proc_src_units(srcfile, filename)
+    chx = proc_src_units(srcfile, filename)
     chan_nums = np.arange(NChannels, dtype='int')
     chan_names = ['Chan{}'.format(i) for i in range(NChannels)]
-    rcg.channel_indexes = chan_nums
-    rcg.channel_names = np.array(chan_names, dtype='string_')
-    block.recordingchannelgroups.append(rcg)
+    chx.index = chan_nums
+    chx.channel_names = np.array(chan_names, dtype='string_')
+    block.channel_indexes.append(chx)
 
     for rep in srcfile['sets'][0, 0].flatten():
         proc_src_condition(rep, filename, ADperiod, side, block)
@@ -111,7 +108,7 @@ def proc_src_comments(srcfile, filename):
 
     timeStamps = np.array(timeStamps, dtype=np.float32)
     t_start = timeStamps.min()
-    timeStamps = pq.Quantity(timeStamps-t_start, units=pq.d).rescale(pq.s)
+    timeStamps = pq.Quantity(timeStamps - t_start, units=pq.d).rescale(pq.s)
     texts = np.array(texts, dtype='S')
     senders = np.array(senders, dtype='S')
     t_start = brainwaresrcio.convert_brainwaresrc_timestamp(t_start.tolist())
@@ -126,12 +123,12 @@ def proc_src_comments(srcfile, filename):
 def proc_src_units(srcfile, filename):
     '''Get the units in an src file that has been processed by the official
     matlab function.  See proc_src for details'''
-    rcg = RecordingChannelGroup(file_origin=filename,
-                                channel_indexes=np.array([], dtype=int))
+    chx = ChannelIndex(file_origin=filename,
+                       index=np.array([], dtype=int))
     un_unit = Unit(name='UnassignedSpikes', file_origin=filename,
                    elliptic=[], boundaries=[], timestamp=[], max_valid=[])
 
-    rcg.units.append(un_unit)
+    chx.units.append(un_unit)
 
     sortInfo = srcfile['sortInfo'][0, 0]
     timeslice = sortInfo['timeslice'][0, 0]
@@ -147,15 +144,15 @@ def proc_src_units(srcfile, filename):
                         boundaries=[iboundaries],
                         elliptic=[ielliptic], timeStamp=[],
                         max_valid=[maxValid])
-            rcg.units.append(unit)
-    return rcg
+            chx.units.append(unit)
+    return chx
 
 
 def proc_src_condition(rep, filename, ADperiod, side, block):
     '''Get the condition in a src file that has been processed by the official
     matlab function.  See proc_src for details'''
 
-    rcg = block.recordingchannelgroups[0]
+    chx = block.channel_indexes[0]
 
     stim = rep['stim'].flatten()
     params = [str(res[0]) for res in stim['paramName'][0].flatten()]
@@ -175,7 +172,7 @@ def proc_src_condition(rep, filename, ADperiod, side, block):
         trains = proc_src_condition_unit(spikeunit, sweepLen, side, ADperiod,
                                          respWin, damaIndexes, timeStamps,
                                          filename)
-        rcg.units[0].spiketrains.extend(trains)
+        chx.units[0].spiketrains.extend(trains)
         atrains = [trains]
     else:
         damaIndexes = []
@@ -201,10 +198,10 @@ def proc_src_condition(rep, filename, ADperiod, side, block):
         respWins = []
         spikeunits = []
 
-    for unit, IdString in zip(rcg.units[1:], IdStrings):
+    for unit, IdString in zip(chx.units[1:], IdStrings):
         unit.name = str(IdString)
 
-    fullunit = zip(spikeunits, rcg.units[1:], sweepLens, respWins)
+    fullunit = zip(spikeunits, chx.units[1:], sweepLens, respWins)
     for spikeunit, unit, sweepLen, respWin in fullunit:
         trains = proc_src_condition_unit(spikeunit, sweepLen, side, ADperiod,
                                          respWin, damaIndexes, timeStamps,
@@ -226,8 +223,8 @@ def proc_src_condition_unit(spikeunit, sweepLen, side, ADperiod, respWin,
     '''Get the unit in a condition in a src file that has been processed by
     the official matlab function.  See proc_src for details'''
     if not damaIndexes:
-        damaIndexes = [0]*len(spikeunit)
-        timeStamps = [0]*len(spikeunit)
+        damaIndexes = [0] * len(spikeunit)
+        timeStamps = [0] * len(spikeunit)
 
     trains = []
     for sweep, damaIndex, timeStamp in zip(spikeunit, damaIndexes,

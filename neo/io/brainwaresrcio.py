@@ -47,7 +47,7 @@ import quantities as pq
 
 # needed core neo modules
 from neo.core import (Block, Event,
-                      RecordingChannelGroup, Segment, SpikeTrain, Unit)
+                      ChannelIndex, Segment, SpikeTrain, Unit)
 
 # need to subclass BaseIO
 from neo.io.baseio import BaseIO
@@ -78,7 +78,7 @@ class BrainwareSrcIO(BaseIO):
     reading or closed.
 
     Note 1:
-        The first Unit in each RecordingChannelGroup is always
+        The first Unit in each ChannelIndex is always
         UnassignedSpikes, which has a SpikeTrain for each Segment containing
         all the spikes not assigned to any Unit in that Segment.
 
@@ -92,8 +92,8 @@ class BrainwareSrcIO(BaseIO):
         a condition, each repetition is stored as a separate Segment.
 
     Note 4:
-        There is always only one RecordingChannelGroup.  BrainWare stores the
-        equivalent of RecordingChannelGroups in separate files.
+        There is always only one ChannelIndex.  BrainWare stores the
+        equivalent of ChannelIndexes in separate files.
 
     Usage:
         >>> from neo.io.brainwaresrcio import BrainwareSrcIO
@@ -115,7 +115,7 @@ class BrainwareSrcIO(BaseIO):
     is_writable = False  # write is not supported
 
     # This class is able to directly or indirectly handle the following objects
-    supported_objects = [Block, RecordingChannelGroup,
+    supported_objects = [Block, ChannelIndex,
                          Segment, SpikeTrain, Event, Unit]
 
     readable_objects = [Block]
@@ -163,9 +163,9 @@ class BrainwareSrcIO(BaseIO):
         # This stores the current Block
         self._blk = None
 
-        # This stores the current RecordingChannelGroup for easy access
-        # It is equivalent to self._blk.recordingchannelgroups[0]
-        self._rcg = None
+        # This stores the current ChannelIndex for easy access
+        # It is equivalent to self._blk.channel_indexes[0]
+        self._chx = None
 
         # This stores the current Segment for easy access
         # It is equivalent to self._blk.segments[-1]
@@ -183,13 +183,6 @@ class BrainwareSrcIO(BaseIO):
         # list lengths are unreliable, so we need to store this value for the
         # whole file
         self._damaged = False
-
-        # this stores whether the current file is lazy loaded
-        self._lazy = False
-
-        # this stores whether the current file is cascading
-        # this is false by default so if we use read_block on its own it works
-        self._cascade = False
 
         # this stores an empty SpikeTrain which is used in various places.
         self._default_spiketrain = None
@@ -225,27 +218,27 @@ class BrainwareSrcIO(BaseIO):
         self._damaged = False
         self._fsrc = None
         self._seg0 = None
-        self._cascade = False
         self._file_origin = None
         self._lazy = False
         self._default_spiketrain = None
 
-    def read(self, lazy=False, cascade=True, **kargs):
+    def read(self, lazy=False, **kargs):
         """
         Reads the first Block from the Spike ReCording file "filename"
         generated with BrainWare.
 
         If you wish to read more than one Block, please use read_all_blocks.
         """
-        return self.read_block(lazy=lazy, cascade=cascade, **kargs)
+        return self.read_block(lazy=lazy, **kargs)
 
-    def read_block(self, lazy=False, cascade=True, **kargs):
+    def read_block(self, lazy=False, **kargs):
         """
         Reads the first Block from the Spike ReCording file "filename"
         generated with BrainWare.
 
         If you wish to read more than one Block, please use read_all_blocks.
         """
+        assert not lazy, 'Do not support lazy'
 
         # there are no keyargs implemented to so far.  If someone tries to pass
         # them they are expecting them to do something or making a mistake,
@@ -254,11 +247,11 @@ class BrainwareSrcIO(BaseIO):
             raise NotImplementedError('This method does not have any '
                                       'arguments implemented yet')
 
-        blockobj = self.read_next_block(cascade=cascade, lazy=lazy)
+        blockobj = self.read_next_block()
         self.close()
         return blockobj
 
-    def read_next_block(self, cascade=True, lazy=False, **kargs):
+    def read_next_block(self, **kargs):
         """
         Reads a single Block from the Spike ReCording file "filename"
         generated with BrainWare.
@@ -276,28 +269,24 @@ class BrainwareSrcIO(BaseIO):
             raise NotImplementedError('This method does not have any '
                                       'arguments implemented yet')
 
-        self._lazy = lazy
         self._opensrc()
 
         # create _default_spiketrain here for performance reasons
         self._default_spiketrain = self._init_default_spiketrain.copy()
         self._default_spiketrain.file_origin = self._file_origin
-        if lazy:
-            self._default_spiketrain.lazy_shape = (0,)
 
         # create the Block and the contents all Blocks of from IO share
         self._blk = Block(file_origin=self._file_origin)
-        if not cascade:
-            return self._blk
-        self._rcg = RecordingChannelGroup(file_origin=self._file_origin,
-                                          channel_indexes=np.array([], dtype=np.int))
+
+        self._chx = ChannelIndex(file_origin=self._file_origin,
+                                 index=np.array([], dtype=np.int))
         self._seg0 = Segment(name='Comments', file_origin=self._file_origin)
         self._unit0 = Unit(name='UnassignedSpikes',
                            file_origin=self._file_origin,
                            elliptic=[], boundaries=[],
                            timestamp=[], max_valid=[])
-        self._blk.recordingchannelgroups.append(self._rcg)
-        self._rcg.units.append(self._unit0)
+        self._blk.channel_indexes.append(self._chx)
+        self._chx.units.append(self._unit0)
         self._blk.segments.append(self._seg0)
 
         # this actually reads the contents of the Block
@@ -317,7 +306,7 @@ class BrainwareSrcIO(BaseIO):
 
         # reset the per-Block attributes
         self._blk = None
-        self._rcg = None
+        self._chx = None
         self._unitdict = {}
 
         # combine the comments into one big event
@@ -326,7 +315,7 @@ class BrainwareSrcIO(BaseIO):
         # result is None iff the end of the file is reached, so we can
         # close the file
         # this notification is not helpful if using the read method with
-        # cascade==True, since the user will know it is done when the method
+        # cascading, since the user will know it is done when the method
         # returns a value
         if result is None:
             self.logger.info('Last Block read.  Closing file.')
@@ -334,7 +323,7 @@ class BrainwareSrcIO(BaseIO):
 
         return blockobj
 
-    def read_all_blocks(self, cascade=True, lazy=False, **kargs):
+    def read_all_blocks(self, lazy=False, **kargs):
         """
         Reads all Blocks from the Spike ReCording file "filename"
         generated with BrainWare.
@@ -348,12 +337,11 @@ class BrainwareSrcIO(BaseIO):
         # there are no keyargs implemented to so far.  If someone tries to pass
         # them they are expecting them to do something or making a mistake,
         # neither of which should pass silently
+        assert not lazy, 'Do not support lazy'
+
         if kargs:
             raise NotImplementedError('This method does not have any '
                                       'argument implemented yet')
-
-        self._lazy = lazy
-        self._cascade = True
 
         self.close()
         self._opensrc()
@@ -364,8 +352,7 @@ class BrainwareSrcIO(BaseIO):
         blocks = []
         while self._isopen:
             try:
-                blocks.append(self.read_next_block(cascade=cascade,
-                                                   lazy=lazy))
+                blocks.append(self.read_next_block())
             except:
                 self.close()
                 raise
@@ -470,7 +457,7 @@ class BrainwareSrcIO(BaseIO):
         """
         if isinstance(data_obj, Unit):
             self.logger.warning('Unknown Unit found, adding to Units list')
-            self._rcg.units.append(data_obj)
+            self._chx.units.append(data_obj)
             if data_obj.name:
                 self._unitdict[data_obj.name] = data_obj
         elif isinstance(data_obj, Segment):
@@ -518,13 +505,11 @@ class BrainwareSrcIO(BaseIO):
         _combine_events(events) - combine a list of Events
         with single events into one long Event
         """
-        if not events or self._lazy:
+        if not events:
             event = Event(times=pq.Quantity([], units=pq.s),
                           labels=np.array([], dtype='S'),
                           senders=np.array([], dtype='S'),
                           t_start=0)
-            if self._lazy:
-                event.lazy_shape = len(events)
             return event
 
         times = []
@@ -537,7 +522,7 @@ class BrainwareSrcIO(BaseIO):
 
         times = np.array(times, dtype=np.float32)
         t_start = times.min()
-        times = pq.Quantity(times-t_start, units=pq.d).rescale(pq.s)
+        times = pq.Quantity(times - t_start, units=pq.d).rescale(pq.s)
 
         labels = np.array(labels)
         senders = np.array(senders)
@@ -569,9 +554,6 @@ class BrainwareSrcIO(BaseIO):
 
         if hasattr(spiketrains[0], 'waveforms') and len(spiketrains) == 1:
             train = spiketrains[0]
-            if self._lazy and not hasattr(train, 'lazy_shape'):
-                train.lazy_shape = train.shape
-                train = train[:0]
             return train
 
         if hasattr(spiketrains[0], 't_stop'):
@@ -637,12 +619,7 @@ class BrainwareSrcIO(BaseIO):
         # get the maximum time
         t_stop = times[-1] * 2.
 
-        if self._lazy:
-            timesshape = times.shape
-            times = pq.Quantity([], units=pq.ms, copy=False)
-            waveforms = pq.Quantity([[[]]], units=pq.mV)
-        else:
-            waveforms = pq.Quantity(waveforms, units=pq.mV, copy=False)
+        waveforms = pq.Quantity(waveforms, units=pq.mV, copy=False)
 
         train = SpikeTrain(times=times, copy=False,
                            t_start=self._default_t_start.copy(), t_stop=t_stop,
@@ -651,8 +628,6 @@ class BrainwareSrcIO(BaseIO):
                            timestamp=self._default_datetime,
                            respwin=np.array([], dtype=np.int32),
                            dama_index=-1, trig2=trig2, side='')
-        if self._lazy:
-            train.lazy_shape = timesshape
         return train
 
     # -------------------------------------------------------------------------
@@ -925,7 +900,7 @@ class BrainwareSrcIO(BaseIO):
 
         # int32 -- SpikeTrain length in ms
         spiketrainlen = pq.Quantity(np.fromfile(self._fsrc, dtype=np.int32,
-                                    count=1)[0], units=pq.ms, copy=False)
+                                                count=1)[0], units=pq.ms, copy=False)
 
         segments = []
         for train in trains:
@@ -980,8 +955,9 @@ class BrainwareSrcIO(BaseIO):
             self.__read_comment()
 
         # create a channel_index for the numchannels
-        self._rcg.channel_indexes = np.arange(numchannels)
-        self._rcg.channel_names = np.array(['Chan{}'.format(i) for i in range(numchannels)], dtype='S')
+        self._chx.index = np.arange(numchannels)
+        self._chx.channel_names = np.array(['Chan{}'.format(i)
+                                            for i in range(numchannels)], dtype='S')
 
         # store what side of the head we are dealing with
         for segment in segments:
@@ -1296,7 +1272,7 @@ class BrainwareSrcIO(BaseIO):
         numelements = np.fromfile(self._fsrc, dtype=np.int16, count=1)[0]
 
         # {sequence} * numelements1 -- the number of lists of Units to read
-        self._rcg.annotations['max_valid'] = []
+        self._chx.annotations['max_valid'] = []
         for i in range(numelements):
 
             # {skip} = byte * 2 (int16) -- skip 2 bytes
@@ -1313,19 +1289,19 @@ class BrainwareSrcIO(BaseIO):
 
             # if there aren't enough Units, create them
             # remember we need to skip the UnassignedSpikes Unit
-            if numunits > len(self._rcg.units) + 1:
-                for ind1 in range(len(self._rcg.units), numunits + 1):
+            if numunits > len(self._chx.units) + 1:
+                for ind1 in range(len(self._chx.units), numunits + 1):
                     unit = Unit(name='unit%s' % ind1,
                                 file_origin=self._file_origin,
                                 elliptic=[], boundaries=[],
                                 timestamp=[], max_valid=[])
-                    self._rcg.units.append(unit)
+                    self._chx.units.append(unit)
 
             # {Block} * numelements -- Units
             for ind1 in range(numunits):
                 # get the Unit with the given index
                 # remember we need to skip the UnassignedSpikes Unit
-                unit = self._rcg.units[ind1 + 1]
+                unit = self._chx.units[ind1 + 1]
 
                 # {skip} = byte * 2 (int16) -- skip 2 bytes
                 self._fsrc.seek(2, 1)
@@ -1348,7 +1324,7 @@ class BrainwareSrcIO(BaseIO):
                 unit.annotations['boundaries'].append(boundaries)
                 unit.annotations['max_valid'].append(max_valid)
 
-        return self._rcg.units[1:maxunit]
+        return self._chx.units[1:maxunit]
 
     def __read_unit_list_timestamped(self):
         """
@@ -1460,7 +1436,7 @@ class BrainwareSrcIO(BaseIO):
         else:
             unit = Unit(name=name, file_origin=self._file_origin,
                         elliptic=[], boundaries=[], timestamp=[], max_valid=[])
-            self._rcg.units.append(unit)
+            self._chx.units.append(unit)
             self._unitdict[name] = unit
 
         # convert the individual spikes to SpikeTrains and add them to the Unit
@@ -1574,7 +1550,7 @@ if __name__ == '__main__':
                                        make_all_directories)
     shortname = BrainwareSrcIO.__name__.lower().strip('io')
     local_test_dir = create_local_temp_dir(shortname)
-    url = url_for_tests+shortname
+    url = url_for_tests + shortname
     FILES_TO_TEST.remove('long_170s_1rep_1clust_ch2.src')
     make_all_directories(FILES_TO_TEST, local_test_dir)
     download_test_file(FILES_TO_TEST, local_test_dir, url)
@@ -1583,4 +1559,3 @@ if __name__ == '__main__':
                                         directory=local_test_dir):
         ioobj = BrainwareSrcIO(path)
         ioobj.read_all_blocks(lazy=False)
-        ioobj.read_all_blocks(lazy=True)

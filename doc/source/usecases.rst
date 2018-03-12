@@ -12,15 +12,17 @@ that we have recorded three trials/episodes. We therefore have a total of
 Our entire dataset is contained in a :class:`Block`, which in turn contains:
 
   * 3 :class:`Segment` objects, each representing data from a single trial,
-  * 1 :class:`RecordingChannelGroup`.
+  * 1 :class:`ChannelIndex`.
 
 .. image:: images/multi_segment_diagram.png
+   :width: 75%
+   :align: center
 
-:class:`Segment` and :class:`RecordingChannelGroup` objects provide two different
+:class:`Segment` and :class:`ChannelIndex` objects provide two different
 ways to access the data, corresponding respectively, in this scenario, to access
 by **time** and by **space**.
 
-.. note:: segments do not always represent trials, they can be used for many
+.. note:: Segments do not always represent trials, they can be used for many
           purposes: segments could represent parallel recordings for different
           subjects, or different steps in a current clamp protocol.
 
@@ -52,15 +54,13 @@ Perhaps you want to see which physical location produces the strongest response,
     
 .. doctest::
     
-    # We assume that our block has only 1 RecordingChannelGroup
-    rcg = block.recordingchannelgroups[0]:
-
-    index = rcg.channel_indexes
-    siglist = [sig[:, index] for sig in rcg.analogsignals]
+    # We assume that our block has only 1 ChannelIndex
+    chx = block.channelindexes[0]:
+    siglist = [sig[:, chx.index] for sig in chx.analogsignals]
     avg = np.mean(siglist, axis=0)
         
     plt.figure()
-    for index, name in zip(rcg.channel_indexes, rcg.channel_names):
+    for index, name in zip(chx.index, chx.channel_names):
         plt.plot(avg[:, index])
         plt.title("Average response on channels %s: %s' % (index, name)
 
@@ -70,12 +70,12 @@ Perhaps you want to see which physical location produces the strongest response,
 
 Combining simultaneously the two approaches of descending the hierarchy
 temporally and spatially can be tricky. Here's an example.
-Let's say you saw something interesting on channel 5 on even numbered trials
+Let's say you saw something interesting on the 6th channel (index 5) on even numbered trials
 during the experiment and you want to follow up. What was the average response?
 
 .. doctest::
 
-    index = rcg.channel_indexes[5]
+    index = chx.index[5]
     avg = np.mean([seg.analogsignals[0][:, index] for seg in block.segments[::2]], axis=1)
     plt.plot(avg)
 
@@ -90,14 +90,17 @@ in :class:`SpikeTrain` objects.
 Again, our data set is contained in a :class:`Block`, which contains:
 
   * 3 :class:`Segments` (one per trial).
-  * 2 :class:`RecordingChannelGroups` (one per tetrode), which contain:
+  * 2 :class:`ChannelIndexes` (one per tetrode), which contain:
   
-    * 2 :class:`Unit` objects (= 2 neurons) for the first :class:`RecordingChannelGroup`
-    * 5 :class:`Units` for the second :class:`RecordingChannelGroup`.
+    * 2 :class:`Unit` objects (= 2 neurons) for the first :class:`ChannelIndex`
+    * 5 :class:`Units` for the second :class:`ChannelIndex`.
 
 In total we have 3 x 7 = 21 :class:`SpikeTrains` in this :class:`Block`.
 
 .. image:: images/multi_segment_diagram_spiketrain.png
+   :width: 75%
+   :align: center
+
 
 There are three ways to access the :class:`SpikeTrain` data:
 
@@ -135,21 +138,21 @@ Now we can calculate the PSTH averaged over trials for each unit, using the
         plt.title("PSTH of unit %s" % unit.name)
         
 
-**By RecordingChannelGroup**
+**By ChannelIndex**
 
 Here we calculate a PSTH averaged over trials by channel location,
 blending all units:
 
 .. doctest::
 
-    for rcg in block.recordingchannelgroups:
+    for chx in block.channelindexes:
         stlist = []
-        for unit in rcg.units:
+        for unit in chx.units:
             stlist.extend([st - st.t_start for st in unit.spiketrains])
         plt.figure()
         count, bins = np.histogram(stlist)
         plt.bar(bins[:-1], count, width=bins[1] - bins[0])
-        plt.title("PSTH blend of tetrode  %s" % rcg.name)
+        plt.title("PSTH blend of tetrode  %s" % chx.name)
 
 
 Spike sorting
@@ -158,7 +161,7 @@ Spike sorting
 Spike sorting is the process of detecting and classifying high-frequency
 deflections ("spikes") on a group of physically nearby recording channels.
 
-For example, let's say you have defined a RecordingChannelGroup for a tetrode
+For example, let's say you have defined a ChannelIndex for a tetrode
 containing 4 separate channels. Here is an example showing (with fake data)
 how you could iterate over the contained signals and extract spike times.
 (Of course in reality you would use a more sophisticated algorithm.)
@@ -177,15 +180,15 @@ how you could iterate over the contained signals and extract spike times.
                       [0.1, 0.1, 0.1, 0.1],
                       [0.1, 0.1, 0.1, 0.1]],
                      sampling_rate=1000*Hz, units='V'))
-    rcg = RecordingChannelGroup(channel_indexes=[0, 1, 2, 3])
-    rcg.analogsignals.append(seg.analogsignals[0])
+    chx = ChannelIndex(channel_indexes=[0, 1, 2, 3])
+    chx.analogsignals.append(seg.analogsignals[0])
 
 
     # extract spike trains from each channel
     st_list = []
-    for signal in rcg.analogsignals:
+    for signal in chx.analogsignals:
         # use a simple threshhold detector
-        spike_mask = np.where(np.min(signal.magnitude, axis=1) < -1.0)[0]   # note, np.min(Quantity) is borked
+        spike_mask = np.where(np.min(signal.magnitude, axis=1) < -1.0)[0]
         
         # create a spike train
         spike_times = signal.times[spike_mask]
@@ -195,7 +198,7 @@ how you could iterate over the contained signals and extract spike times.
         wf_list = []
         for spike_idx in np.nonzero(spike_mask)[0]:
             wf_list.append(signal[spike_idx-1:spike_idx+2, :])
-        st.waveforms = np.array(wf_list)  # should really be 3D AnalogSignal
+        st.waveforms = np.array(wf_list)
         
         st_list.append(st)
 
@@ -207,7 +210,7 @@ Unit to the group on which we detected it.
     
     u = Unit()
     u.spiketrains = st_list
-    rcg.units.append(u)
+    chx.units.append(u)
 
 Now the recording channel group (tetrode) contains a list of analogsignals,
 and a single Unit object containing all of the detected spiketrains from those

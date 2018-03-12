@@ -6,10 +6,7 @@ Tests of the neo.core.unit.Unit class
 # needed for python 3 compatibility
 from __future__ import absolute_import, division, print_function
 
-try:
-    import unittest2 as unittest
-except ImportError:
-    import unittest
+import unittest
 
 import numpy as np
 
@@ -22,7 +19,7 @@ else:
 
 from neo.core.unit import Unit
 from neo.core.container import filterdata
-from neo.core import SpikeTrain, RecordingChannelGroup
+from neo.core import SpikeTrain, ChannelIndex
 from neo.test.tools import (assert_neo_object_is_compliant,
                             assert_arrays_equal,
                             assert_same_sub_schema)
@@ -113,7 +110,7 @@ class TestUnit(unittest.TestCase):
         self.assertEqual(unit.name, targ1)
 
         targ2 = get_fake_value('description', str,
-                               seed=seed+1, obj=Unit)
+                               seed=seed + 1, obj=Unit)
         self.assertEqual(unit.description, targ2)
 
         targ3 = get_fake_value('file_origin', str)
@@ -143,16 +140,16 @@ class TestUnit(unittest.TestCase):
                                unit1a.spiketrains)
 
     def test__children(self):
-        rcg = RecordingChannelGroup(channel_indexes=np.arange(self.nchildren), name='rcg1')
-        rcg.units = [self.unit1]
-        rcg.create_many_to_one_relationship()
+        chx = ChannelIndex(index=np.arange(self.nchildren), name='chx1')
+        chx.units = [self.unit1]
+        chx.create_many_to_one_relationship()
         assert_neo_object_is_compliant(self.unit1)
-        assert_neo_object_is_compliant(rcg)
+        assert_neo_object_is_compliant(chx)
 
         self.assertEqual(self.unit1._container_child_objects, ())
         self.assertEqual(self.unit1._data_child_objects, ('SpikeTrain',))
         self.assertEqual(self.unit1._single_parent_objects,
-                         ('RecordingChannelGroup',))
+                         ('ChannelIndex',))
         self.assertEqual(self.unit1._multi_child_objects, ())
         self.assertEqual(self.unit1._multi_parent_objects, ())
         self.assertEqual(self.unit1._child_properties, ())
@@ -163,16 +160,16 @@ class TestUnit(unittest.TestCase):
         self.assertEqual(self.unit1._data_child_containers, ('spiketrains',))
         self.assertEqual(self.unit1._single_child_containers, ('spiketrains',))
         self.assertEqual(self.unit1._single_parent_containers,
-                         ('recordingchannelgroup',))
+                         ('channel_index',))
         self.assertEqual(self.unit1._multi_child_containers, ())
         self.assertEqual(self.unit1._multi_parent_containers, ())
 
         self.assertEqual(self.unit1._child_objects, ('SpikeTrain',))
         self.assertEqual(self.unit1._child_containers, ('spiketrains',))
         self.assertEqual(self.unit1._parent_objects,
-                         ('RecordingChannelGroup',))
+                         ('ChannelIndex',))
         self.assertEqual(self.unit1._parent_containers,
-                         ('recordingchannelgroup',))
+                         ('channel_index',))
 
         self.assertEqual(len(self.unit1._single_children), self.nchildren)
         self.assertEqual(len(self.unit1._multi_children), 0)
@@ -203,7 +200,7 @@ class TestUnit(unittest.TestCase):
                                self.trains1a)
 
         self.assertEqual(len(self.unit1.parents), 1)
-        self.assertEqual(self.unit1.parents[0].name, 'rcg1')
+        self.assertEqual(self.unit1.parents[0].name, 'chx1')
 
     def test__size(self):
         targ = {'spiketrains': self.nchildren}
@@ -362,7 +359,7 @@ class TestUnit(unittest.TestCase):
         res2 = self.targobj.filter(j=1, objects=['SpikeTrain'])
         res3 = self.targobj.filter(j=1, objects=[SpikeTrain])
         res4 = self.targobj.filter(j=1, objects=[SpikeTrain,
-                                                 RecordingChannelGroup])
+                                                 ChannelIndex])
 
         assert_same_sub_schema(res0, targ)
         assert_same_sub_schema(res1, targ)
@@ -373,8 +370,8 @@ class TestUnit(unittest.TestCase):
     def test__filter_single_annotation_obj_none(self):
         targ = []
 
-        res0 = self.targobj.filter(j=1, objects=RecordingChannelGroup)
-        res1 = self.targobj.filter(j=1, objects='RecordingChannelGroup')
+        res0 = self.targobj.filter(j=1, objects=ChannelIndex)
+        res1 = self.targobj.filter(j=1, objects='ChannelIndex')
         res2 = self.targobj.filter(j=1, objects=[])
 
         assert_same_sub_schema(res0, targ)

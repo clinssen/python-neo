@@ -9,15 +9,12 @@ from __future__ import absolute_import, division, print_function
 import os.path
 import sys
 
-try:
-    import unittest2 as unittest
-except ImportError:
-    import unittest
+import unittest
 
 import numpy as np
 import quantities as pq
 
-from neo.core import Block, RecordingChannelGroup, Segment, SpikeTrain, Unit
+from neo.core import Block, ChannelIndex, Segment, SpikeTrain, Unit
 from neo.io import BrainwareF32IO
 from neo.test.iotest.common_io_test import BaseTestIO
 from neo.test.tools import (assert_same_sub_schema,
@@ -47,18 +44,18 @@ def proc_f32(filename):
              f32 file name = 'file1.f32'
     '''
 
-    filenameorig = os.path.basename(filename[:-12]+'.f32')
+    filenameorig = os.path.basename(filename[:-12] + '.f32')
 
     # create the objects to store other objects
     block = Block(file_origin=filenameorig)
-    rcg = RecordingChannelGroup(file_origin=filenameorig,
-                                channel_indexes=np.array([], dtype=np.int),
-                                channel_names=np.array([], dtype='S'))
+    chx = ChannelIndex(file_origin=filenameorig,
+                       index=np.array([], dtype=np.int),
+                       channel_names=np.array([], dtype='S'))
     unit = Unit(file_origin=filenameorig)
 
     # load objects into their containers
-    block.recordingchannelgroups.append(rcg)
-    rcg.units.append(unit)
+    block.channel_indexes.append(chx)
+    chx.units.append(unit)
 
     try:
         with np.load(filename) as f32obj:

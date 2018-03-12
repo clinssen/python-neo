@@ -49,10 +49,28 @@ else:
 
 class StimfitIO(BaseIO):
     """
-    Class for converting a stfio Recording to a neo object.
+    Class for converting a stfio Recording to a Neo object.
     Provides a standardized representation of the data as defined by the neo
     project; this is useful to explore the data with an increasing number of
-    electrophysiology software tools that rely on the neo standard.
+    electrophysiology software tools that rely on the Neo standard.
+
+    stfio is a standalone file i/o Python module that ships with the Stimfit
+    program (http://www.stimfit.org). It is a Python wrapper around Stimfit's file
+    i/o library (libstfio) that natively provides support for the following file
+    types:
+
+     - ABF (Axon binary file format; pClamp 6--9)
+     - ABF2 (Axon binary file format 2; pClamp 10+)
+     - ATF (Axon text file format)
+     - AXGX/AXGD (Axograph X file format)
+     - CFS (Cambridge electronic devices filing system)
+     - HEKA (HEKA binary file format)
+     - HDF5 (Hierarchical data format 5; only hdf5 files written by Stimfit or
+       stfio are supported)
+
+    In addition, libstfio can use the biosig file i/o library as an additional file
+    handling backend (http://biosig.sourceforge.net/), extending support to more
+    than 30 additional file formats (http://pub.ist.ac.at/~schloegl/biosig/TESTED).
 
     Example usage:
         >>> import neo
@@ -98,7 +116,8 @@ class StimfitIO(BaseIO):
             self.stfio_rec = filename
             self.filename = None
 
-    def read_block(self, lazy=False, cascade=True):
+    def read_block(self, lazy=False):
+        assert not lazy, 'Do not support lazy'
 
         if self.filename is not None:
             self.stfio_rec = stfio.read(self.filename)
@@ -111,11 +130,8 @@ class StimfitIO(BaseIO):
         except:
             bl.rec_datetime = None
 
-        if not cascade:
-            return bl
-
         dt = np.round(self.stfio_rec.dt * 1e-3, 9) * pq.s  # ms to s
-        sampling_rate = 1.0/dt
+        sampling_rate = 1.0 / dt
         t_start = 0 * pq.s
 
         # iterate over sections first:
@@ -132,15 +148,10 @@ class StimfitIO(BaseIO):
                 except:
                     unit = ''
 
-                if lazy:
-                    signal = pq.Quantity([], unit)
-                else:
-                    signal = pq.Quantity(recsig[j], unit)
+                signal = pq.Quantity(recsig[j], unit)
                 anaSig = AnalogSignal(signal, sampling_rate=sampling_rate,
                                       t_start=t_start, name=str(name),
                                       channel_index=i)
-                if lazy:
-                    anaSig.lazy_shape = length
                 seg.analogsignals.append(anaSig)
 
             bl.segments.append(seg)

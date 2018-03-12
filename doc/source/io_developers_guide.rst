@@ -10,7 +10,7 @@ IO developers' guide
 Guidelines for IO implementation
 ================================
 
-Receipe to develop an IO module for a new data format:
+Recipe to develop an IO module for a new data format:
     1. Fully understand the object model. See :doc:`core`. If in doubt ask the `mailing list`_.
     2. Fully understand :mod:`neo.io.exampleio`, It is a fake IO to explain the API. If in doubt ask the list.
     3. Copy/paste ``exampleio.py`` and choose clear file and class names for your IO.
@@ -22,14 +22,14 @@ Receipe to develop an IO module for a new data format:
        implementing a :meth:`load_lazy_cascade` method.
     9. Write good docstrings. List dependencies, including minimum version numbers.
     10. Add your class to :mod:`neo.io.__init__`. Keep the import inside try/except for dependency reasons.
-    11. Contact the Neo maintainers to put sample files for testing on the G-Node server (write access is not public).
+    11. Create a account at gin.g-node.org and deposite files in NeuralEnsemble/ephy_testing_data.
     12. Write tests in ``neo/test/io/test_xxxxxio.py``. You must at least pass the standard tests (inherited from :class:`BaseTestIO`).
     13. Commit or send a patch only if all tests pass.
 
 Miscellaneous
 =============
 
-    * If your IO supports several version of a format (like ABF1, ABF2), upload to G-node test file repository all file version possible. (for utest coverage).
+    * If your IO supports several version of a format (like ABF1, ABF2), upload to gin.g-node.org test file repository all file version possible. (for utest coverage).
     * :py:func:`neo.core.Block.create_many_to_one_relationship` offers a utility to complete the hierachy when all one-to-many relationships have been created.
     * :py:func:`neo.io.tools.populate_RecordingChannel` offers a utility to
       create inside a :class:`Block` all :class:`RecordingChannel` objects and links to :class:`AnalogSignal`, :class:`SpikeTrain`, ...
@@ -60,7 +60,7 @@ enable advanced lazy loading:
   Because the links of objects can point to previously loaded objects, you need to cache all loaded objects in the IO. If :meth:`load_lazy_cascade`
   is called with the address of a previously loaded object, return the object instead of loading it again. Also, a call to :meth:`load_lazy_cascade`
   might require you to load additional objects further up in the hierarchy. For example, if a :class:`SpikeTrain` is accessed through a
-  :class:`Segment`, its :class:`Unit` and the :class:`RecordingChannelGroup` of the :class:`Unit` might have to be loaded at that point as well
+  :class:`Segment`, its :class:`Unit` and the :class:`ChannelIndex` of the :class:`Unit` might have to be loaded at that point as well
   if they have not been accessed before.
 
   Note that you are free to restrict lazy cascading to certain objects. For example, you could use the ``LazyList`` only for the ``analogsignals``
@@ -70,14 +70,14 @@ Tests
 =====
 
 :py:class:`neo.test.io.commun_io_test.BaseTestIO` provide standard tests.
-To use these you need to upload some sample data files at the `G-Node portal`_. They will be publicly accessible for testing Neo.
+To use these you need to upload some sample data files at the `gin-gnode`_. They will be publicly accessible for testing Neo.
 These tests:
 
   * check the compliance with the schema: hierachy, attribute types, ...
   * check if the IO respects the *lazy* and *cascade* keywords.
   * For IO able to both write and read data, it compares a generated dataset with the same data after a write/read cycle.
 
-The test scripts download all files from the `G-Node portal`_ and store them locally in ``neo/test/io/files_for_tests/``.
+The test scripts download all files from the `gin-gnode`_ and store them locally in ``neo/test/io/files_for_tests/``.
 Subsequent test runs use the previously downloaded files, rather than trying to download them each time.
 
 Here is an example test script taken from the distribution: ``test_axonio.py``:
@@ -120,4 +120,4 @@ Here is the entire file:
 
 
 .. _`mailing list`: http://groups.google.com/group/neuralensemble
-.. _G-node portal: https://portal.g-node.org/neo/
+.. _gin-gnode: https://web.gin.g-node.org/NeuralEnsemble/ephy_testing_data

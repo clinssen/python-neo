@@ -19,7 +19,7 @@ from neo import logging_handler
 from neo.core import (AnalogSignal, Block,
                       Epoch, Event,
                       IrregularlySampledSignal,
-                      RecordingChannelGroup,
+                      ChannelIndex,
                       Segment, SpikeTrain, Unit)
 
 read_error = "This type is not supported by this file format for reading"
@@ -37,11 +37,11 @@ class BaseIO(object):
     The key methods of the class are:
         - ``read()`` - Read the whole object structure, return a list of Block
                 objects
-        - ``read_block(lazy=True, cascade=True, **params)`` - Read Block object
+        - ``read_block(lazy=True, **params)`` - Read Block object
                 from file with some parameters
-        - ``read_segment(lazy=True, cascade=True, **params)`` - Read Segment
+        - ``read_segment(lazy=True, **params)`` - Read Segment
                 object from file with some parameters
-        - ``read_spiketrainlist(lazy=True, cascade=True, **params)`` - Read
+        - ``read_spiketrainlist(lazy=True, **params)`` - Read
                 SpikeTrainList object from file with some parameters
         - ``write()`` - Write the whole object structure
         - ``write_block(**params)``    - Write Block object to file with some
@@ -52,7 +52,7 @@ class BaseIO(object):
                 file with some parameters
 
     The class can also implement these methods:
-        - ``read_XXX(lazy=True, cascade=True, **params)``
+        - ``read_XXX(lazy=True, **params)``
         - ``write_XXX(**params)``
         where XXX could be one of the objects supported by the IO
 
@@ -81,14 +81,14 @@ class BaseIO(object):
     readable_objects = []
     writeable_objects = []
 
-    has_header = False
-    is_streameable = False
+    support_lazy = False
+
     read_params = {}
     write_params = {}
 
     name = 'BaseIO'
     description = ''
-    extentions = []
+    extensions = []
 
     mode = 'file'  # or 'fake' or 'dir' or 'database'
 
@@ -107,18 +107,17 @@ class BaseIO(object):
             corelogger.addHandler(logging_handler)
 
     ######## General read/write methods #######################
-    def read(self, lazy=False, cascade=True,  **kargs):
+    def read(self, lazy=False, **kargs):
+        if lazy:
+            assert self.support_lazy, 'This IO do not support lazy loading'
         if Block in self.readable_objects:
             if (hasattr(self, 'read_all_blocks') and
                     callable(getattr(self, 'read_all_blocks'))):
-                return self.read_all_blocks(lazy=lazy, cascade=cascade,
-                                            **kargs)
-            return [self.read_block(lazy=lazy, cascade=cascade, **kargs)]
+                return self.read_all_blocks(lazy=lazy, **kargs)
+            return [self.read_block(lazy=lazy, **kargs)]
         elif Segment in self.readable_objects:
             bl = Block(name='One segment only')
-            if not cascade:
-                return bl
-            seg = self.read_segment(lazy=lazy, cascade=cascade,  **kargs)
+            seg = self.read_segment(lazy=lazy, **kargs)
             bl.segments.append(seg)
             bl.create_many_to_one_relationship()
             return [bl]
@@ -161,8 +160,8 @@ class BaseIO(object):
     def read_irregularlysampledsignal(self, **kargs):
         assert(IrregularlySampledSignal in self.readable_objects), read_error
 
-    def read_recordingchannelgroup(self, **kargs):
-        assert(RecordingChannelGroup in self.readable_objects), read_error
+    def read_channelindex(self, **kargs):
+        assert(ChannelIndex in self.readable_objects), read_error
 
     def read_event(self, **kargs):
         assert(Event in self.readable_objects), read_error
@@ -189,8 +188,8 @@ class BaseIO(object):
     def write_irregularlysampledsignal(self, irsig, **kargs):
         assert(IrregularlySampledSignal in self.writeable_objects), write_error
 
-    def write_recordingchannelgroup(self, rcg, **kargs):
-        assert(RecordingChannelGroup in self.writeable_objects), write_error
+    def write_channelindex(self, chx, **kargs):
+        assert(ChannelIndex in self.writeable_objects), write_error
 
     def write_event(self, ev, **kargs):
         assert(Event in self.writeable_objects), write_error

@@ -39,11 +39,11 @@ class Segment(Container):
         >>> seg.spiketrains.append(train1)
         >>>
         >>> sig0 = AnalogSignal(signal=[.01, 3.3, 9.3], units='uV',
-        ...                          sampling_rate=1*Hz)
+        ...                     sampling_rate=1*Hz)
         >>> seg.analogsignals.append(sig0)
         >>>
         >>> sig1 = AnalogSignal(signal=[100.01, 103.3, 109.3], units='nA',
-        ...                          sampling_period=.1*s)
+        ...                     sampling_period=.1*s)
         >>> seg.analogsignals.append(sig1)
 
     *Required attributes/properties*:
@@ -60,7 +60,7 @@ class Segment(Container):
             your Segment. For instance you could use this for trial numbers.
 
     Note: Any other additional arguments are assumed to be user-specific
-            metadata and stored in :attr:`annotations`.
+    metadata and stored in :attr:`annotations`.
 
     *Properties available on this object*:
         :all_data: (list) A list of all child objects in the :class:`Segment`.
@@ -96,6 +96,40 @@ class Segment(Container):
         self.file_datetime = file_datetime
         self.rec_datetime = rec_datetime
         self.index = index
+
+    # t_start attribute is handled as a property so type checking can be done
+    @property
+    def t_start(self):
+        '''
+        Time when first signal begins.
+        '''
+        t_starts = [sig.t_start for sig in self.analogsignals +
+                    self.spiketrains + self.irregularlysampledsignals]
+        t_starts += [e.times[0] for e in self.epochs + self.events if len(e.times) > 0]
+
+        # t_start is not defined if no children are present
+        if len(t_starts) == 0:
+            return None
+
+        t_start = min(t_starts)
+        return t_start
+
+    # t_stop attribute is handled as a property so type checking can be done
+    @property
+    def t_stop(self):
+        '''
+        Time when last signal ends.
+        '''
+        t_stops = [sig.t_stop for sig in self.analogsignals +
+                   self.spiketrains + self.irregularlysampledsignals]
+        t_stops += [e.times[-1] for e in self.epochs + self.events if len(e.times) > 0]
+
+        # t_stop is not defined if no children are present
+        if len(t_stops) == 0:
+            return None
+
+        t_stop = max(t_stops)
+        return t_stop
 
     def take_spiketrains_by_unit(self, unit_list=None):
         '''
@@ -148,8 +182,8 @@ class Segment(Container):
             return []
         indexes = []
         for unit in unit_list:
-            if unit.channel_indexes is not None:
-                indexes.extend(unit.channel_indexes)
+            if unit.get_channel_indexes() is not None:
+                indexes.extend(unit.get_channel_indexes())
 
         return self.take_slice_of_analogsignalarray_by_channelindex(indexes)
 
@@ -165,8 +199,8 @@ class Segment(Container):
 
         sliced_sigarrays = []
         for sigarr in self.analogsignals:
-            if sigarr.channel_indexes is not None:
-                ind = np.in1d(sigarr.channel_indexes, channel_indexes)
+            if sigarr.get_channel_index() is not None:
+                ind = np.in1d(sigarr.get_channel_index(), channel_indexes)
                 sliced_sigarrays.append(sigarr[:, ind])
 
         return sliced_sigarrays
@@ -181,21 +215,21 @@ class Segment(Container):
         *Example*::
 
             >>> from neo.core import (Segment, Block, Unit, SpikeTrain,
-            ...                       RecordingChannelGroup)
+            ...                       ChannelIndex)
             >>>
             >>> blk = Block()
-            >>> rcg = RecordingChannelGroup(name='group0')
-            >>> blk.recordingchannelgroups = [rcg]
+            >>> chx = ChannelIndex(name='group0')
+            >>> blk.channel_indexes = [chx]
             >>>
             >>> for ind in range(5):
             ...         unit = Unit(name='Unit #%s' % ind, channel_index=ind)
-            ...         rcg.units.append(unit)
+            ...         chx.units.append(unit)
             ...
             >>>
             >>> for ind in range(3):
             ...     seg = Segment(name='Simulation #%s' % ind)
             ...     blk.segments.append(seg)
-            ...     for unit in rcg.units:
+            ...     for unit in chx.units:
             ...         train = SpikeTrain([1, 2, 3], units='ms', t_start=0.,
             ...                            t_stop=10)
             ...         train.unit = unit
@@ -204,7 +238,7 @@ class Segment(Container):
             ...
             >>>
             >>> seg0 = blk.segments[-1]
-            >>> seg1 = seg0.construct_subsegment_by_unit(rcg.units[:2])
+            >>> seg1 = seg0.construct_subsegment_by_unit(chx.units[:2])
             >>> len(seg0.spiketrains)
             5
             >>> len(seg1.spiketrains)
@@ -215,5 +249,5 @@ class Segment(Container):
         seg.spiketrains = self.take_spiketrains_by_unit(unit_list)
         seg.analogsignals = \
             self.take_slice_of_analogsignalarray_by_unit(unit_list)
-        #TODO copy others attributes
+        # TODO copy others attributes
         return seg

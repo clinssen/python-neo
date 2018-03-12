@@ -36,7 +36,7 @@ import numpy as np
 import quantities as pq
 
 # needed core neo modules
-from neo.core import Block, RecordingChannelGroup, Segment, SpikeTrain, Unit
+from neo.core import Block, ChannelIndex, Segment, SpikeTrain, Unit
 
 # need to subclass BaseIO
 from neo.io.baseio import BaseIO
@@ -63,8 +63,8 @@ class BrainwareF32IO(BaseIO):
     reading or closed.
 
     Note 1:
-        There is always only one RecordingChannelGroup.  BrainWare stores the
-        equivalent of RecordingChannelGroups in separate files.
+        There is always only one ChannelIndex.  BrainWare stores the
+        equivalent of ChannelIndexes in separate files.
 
     Usage:
         >>> from neo.io.brainwaref32io import BrainwareF32IO
@@ -84,7 +84,7 @@ class BrainwareF32IO(BaseIO):
 
     # This class is able to directly or indirectly handle the following objects
     # You can notice that this greatly simplifies the full Neo object hierarchy
-    supported_objects = [Block, RecordingChannelGroup,
+    supported_objects = [Block, ChannelIndex,
                          Segment, SpikeTrain, Unit]
 
     readable_objects = [Block]
@@ -119,7 +119,6 @@ class BrainwareF32IO(BaseIO):
         self._filename = path.basename(filename)
 
         self._fsrc = None
-        self.__lazy = False
 
         self._blk = None
         self.__unit = None
@@ -129,17 +128,18 @@ class BrainwareF32IO(BaseIO):
         self.__seg = None
         self.__spiketimes = None
 
-    def read(self, lazy=False, cascade=True, **kargs):
+    def read(self, lazy=False, **kargs):
         '''
         Reads simple spike data file "fname" generated with BrainWare
         '''
-        return self.read_block(lazy=lazy, cascade=cascade)
+        return self.read_block(lazy=lazy, )
 
-    def read_block(self, lazy=False, cascade=True, **kargs):
+    def read_block(self, lazy=False, **kargs):
         '''
         Reads a block from the simple spike data file "fname" generated
         with BrainWare
         '''
+        assert not lazy, 'Do not support lazy'
 
         # there are no keyargs implemented to so far.  If someone tries to pass
         # them they are expecting them to do something or making a mistake,
@@ -148,23 +148,18 @@ class BrainwareF32IO(BaseIO):
             raise NotImplementedError('This method does not have any '
                                       'argument implemented yet')
         self._fsrc = None
-        self.__lazy = lazy
 
         self._blk = Block(file_origin=self._filename)
         block = self._blk
 
-        # if we aren't doing cascade, don't load anything
-        if not cascade:
-            return block
-
         # create the objects to store other objects
-        rcg = RecordingChannelGroup(file_origin=self._filename,
-                                    channel_indexes=np.array([], dtype=np.int))
+        chx = ChannelIndex(file_origin=self._filename,
+                           index=np.array([], dtype=np.int))
         self.__unit = Unit(file_origin=self._filename)
 
         # load objects into their containers
-        block.recordingchannelgroups.append(rcg)
-        rcg.units.append(self.__unit)
+        block.channel_indexes.append(chx)
+        chx.units.append(self.__unit)
 
         # initialize values
         self.__t_stop = None
@@ -183,7 +178,6 @@ class BrainwareF32IO(BaseIO):
 
         # cleanup attributes
         self._fsrc = None
-        self.__lazy = False
 
         self._blk = None
 
@@ -285,18 +279,11 @@ class BrainwareF32IO(BaseIO):
                                  **self.__params)
             self.__spiketimes = []
 
-        if self.__lazy:
-            train = SpikeTrain(pq.Quantity([], dtype=np.float32,
-                                           units=pq.ms),
-                               t_start=0*pq.ms, t_stop=self.__t_stop * pq.ms,
-                               file_origin=self._filename)
-            train.lazy_shape = len(self.__spiketimes)
-        else:
-            times = pq.Quantity(self.__spiketimes, dtype=np.float32,
-                                units=pq.ms)
-            train = SpikeTrain(times,
-                               t_start=0*pq.ms, t_stop=self.__t_stop * pq.ms,
-                               file_origin=self._filename)
+        times = pq.Quantity(self.__spiketimes, dtype=np.float32,
+                            units=pq.ms)
+        train = SpikeTrain(times,
+                           t_start=0 * pq.ms, t_stop=self.__t_stop * pq.ms,
+                           file_origin=self._filename)
 
         self.__seg.spiketrains = [train]
         self.__unit.spiketrains.append(train)

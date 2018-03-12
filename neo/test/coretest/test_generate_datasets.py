@@ -6,10 +6,7 @@ Test to  make sure generated datasets are sane.
 # needed for python 3 compatibility
 from __future__ import absolute_import, division
 
-try:
-    import unittest2 as unittest
-except ImportError:
-    import unittest
+import unittest
 
 from datetime import datetime
 
@@ -17,7 +14,7 @@ import numpy as np
 import quantities as pq
 
 from neo.core import (class_by_name, Block, Segment,
-                      RecordingChannelGroup, Unit,
+                      ChannelIndex, Unit,
                       AnalogSignal,
                       IrregularlySampledSignal, SpikeTrain,
                       Event, Epoch)
@@ -44,7 +41,7 @@ class Test__generate_one_simple_segment(unittest.TestCase):
 
     def test_all_supported(self):
         objects = [Block, Segment,
-                   RecordingChannelGroup, Unit,
+                   ChannelIndex, Unit,
                    AnalogSignal,
                    IrregularlySampledSignal, SpikeTrain,
                    Event, Epoch]
@@ -78,7 +75,7 @@ class Test__generate_one_simple_segment(unittest.TestCase):
 
     def test_all_without_block(self):
         objects = [Segment,
-                   RecordingChannelGroup, Unit,
+                   ChannelIndex, Unit,
                    AnalogSignal,
                    IrregularlySampledSignal, SpikeTrain,
                    Event, Epoch]
@@ -96,7 +93,7 @@ class Test__generate_one_simple_segment(unittest.TestCase):
 
     def test_all_without_segment_valueerror(self):
         objects = [Block,
-                   RecordingChannelGroup, Unit,
+                   ChannelIndex, Unit,
                    AnalogSignal,
                    IrregularlySampledSignal, SpikeTrain,
                    Event, Epoch]
@@ -116,7 +113,7 @@ class Test__generate_one_simple_block(unittest.TestCase):
 
     def test_all_supported(self):
         objects = [Block, Segment,
-                   RecordingChannelGroup, Unit,
+                   ChannelIndex, Unit,
                    AnalogSignal,
                    IrregularlySampledSignal, SpikeTrain,
                    Event, Epoch]
@@ -180,7 +177,7 @@ class Test__generate_one_simple_block(unittest.TestCase):
 
     def test_all_without_segment(self):
         objects = [Block,
-                   RecordingChannelGroup, Unit,
+                   ChannelIndex, Unit,
                    AnalogSignal,
                    IrregularlySampledSignal, SpikeTrain,
                    Event, Epoch]
@@ -194,7 +191,7 @@ class Test__generate_one_simple_block(unittest.TestCase):
 
     def test_all_without_block_valueerror(self):
         objects = [Segment,
-                   RecordingChannelGroup, Unit,
+                   ChannelIndex, Unit,
                    AnalogSignal,
                    IrregularlySampledSignal, SpikeTrain,
                    Event, Epoch]
@@ -211,7 +208,7 @@ class Test__generate_from_supported_objects(unittest.TestCase):
 
     def test_all(self):
         objects = [Block, Segment,
-                   RecordingChannelGroup, Unit,
+                   ChannelIndex, Unit,
                    AnalogSignal,
                    IrregularlySampledSignal, SpikeTrain,
                    Event, Epoch]
@@ -297,7 +294,7 @@ class Test__generate_from_supported_objects(unittest.TestCase):
 
     def test_all_without_block(self):
         objects = [Segment,
-                   RecordingChannelGroup, Unit,
+                   ChannelIndex, Unit,
                    AnalogSignal,
                    IrregularlySampledSignal, SpikeTrain,
                    Event, Epoch]
@@ -315,7 +312,7 @@ class Test__generate_from_supported_objects(unittest.TestCase):
 
     def test_all_without_segment(self):
         objects = [Block,
-                   RecordingChannelGroup, Unit,
+                   ChannelIndex, Unit,
                    AnalogSignal,
                    IrregularlySampledSignal, SpikeTrain,
                    Event, Epoch]
@@ -384,7 +381,7 @@ class Test__get_fake_value(unittest.TestCase):
         name = 'name'
         datatype = str
         obj = 'Block'
-        targ = 'Block'+str(np.random.randint(100000))
+        targ = 'Block' + str(np.random.randint(100000))
 
         res = get_fake_value(name, datatype, seed=0, obj=obj)
         self.assertTrue(isinstance(res, str))
@@ -397,7 +394,7 @@ class Test__get_fake_value(unittest.TestCase):
         name = 'description'
         datatype = str
         obj = Segment
-        targ = 'test Segment '+str(np.random.randint(100000))
+        targ = 'test Segment ' + str(np.random.randint(100000))
 
         res = get_fake_value(name, datatype, seed=0, obj=obj)
         self.assertTrue(isinstance(res, str))
@@ -439,7 +436,7 @@ class Test__get_fake_value(unittest.TestCase):
     def test__datetime(self):
         name = 'test__datetime'
         datatype = datetime
-        targ = datetime.fromtimestamp(1000000000*np.random.random())
+        targ = datetime.fromtimestamp(1000000000 * np.random.random())
 
         res = get_fake_value(name, datatype, seed=0)
         self.assertTrue(isinstance(res, datetime))
@@ -454,7 +451,7 @@ class Test__get_fake_value(unittest.TestCase):
         units = np.random.choice(['nA', 'mA', 'A', 'mV', 'V'])
         for i in range(int(dim)):
             size.append(np.random.randint(5) + 1)
-        targ = pq.Quantity(np.random.random(size)*1000, units=units)
+        targ = pq.Quantity(np.random.random(size) * 1000, units=units)
 
         res = get_fake_value(name, datatype, dim=dim, seed=0)
         self.assertTrue(isinstance(res, pq.Quantity))
@@ -470,7 +467,7 @@ class Test__get_fake_value(unittest.TestCase):
         size = []
         for i in range(int(dim)):
             size.append(np.random.randint(5) + 1)
-        targ = pq.Quantity(np.random.random(size)*1000, units=units)
+        targ = pq.Quantity(np.random.random(size) * 1000, units=units)
 
         res = get_fake_value(name, datatype, dim=dim, seed=0, units=units)
         self.assertTrue(isinstance(res, np.ndarray))
@@ -484,7 +481,7 @@ class Test__get_fake_value(unittest.TestCase):
         size = []
         for i in range(int(dim)):
             size.append(np.random.randint(5) + 1)
-        targ = np.random.random(size)*1000
+        targ = np.random.random(size) * 1000
 
         res = get_fake_value(name, datatype, dim=dim, seed=0)
         self.assertTrue(isinstance(res, np.ndarray))
@@ -498,7 +495,7 @@ class Test__get_fake_value(unittest.TestCase):
         size = []
         for i in range(int(dim)):
             size.append(np.random.randint(5) + 1)
-        targ = (np.random.random(size)*1000).tolist()
+        targ = (np.random.random(size) * 1000).tolist()
 
         res = get_fake_value(name, datatype, dim=dim, seed=0)
         self.assertTrue(isinstance(res, list))
@@ -584,8 +581,8 @@ class Test__get_fake_values(unittest.TestCase):
     def test__irregularlysampledsignal(self):
         self.check__get_fake_values(IrregularlySampledSignal)
 
-    def test__recordingchannelgroup(self):
-        self.check__get_fake_values(RecordingChannelGroup)
+    def test__channelindex(self):
+        self.check__get_fake_values(ChannelIndex)
 
     def test__segment(self):
         self.check__get_fake_values(Segment)
@@ -660,11 +657,11 @@ class Test__generate_datasets(unittest.TestCase):
         else:
             self.assertNotEqual(res.children, ())
 
-        if cls in ['RecordingChannelGroup', RecordingChannelGroup]:
+        if cls in ['ChannelIndex', ChannelIndex]:
             for i, unit in enumerate(res.units):
                 for sigarr in res.analogsignals:
-                    self.assertEqual(unit.channel_indexes[0],
-                                     sigarr.channel_index[i])
+                    self.assertEqual(unit.get_channel_indexes()[0],
+                                     sigarr.get_channel_index()[i])
 
     def test__analogsignalarray(self):
         self.check__generate_datasets(AnalogSignal)
@@ -681,8 +678,8 @@ class Test__generate_datasets(unittest.TestCase):
     def test__irregularlysampledsignal(self):
         self.check__generate_datasets(IrregularlySampledSignal)
 
-    def test__recordingchannelgroup(self):
-        self.check__generate_datasets(RecordingChannelGroup)
+    def test__channelindex(self):
+        self.check__generate_datasets(ChannelIndex)
 
     def test__segment(self):
         self.check__generate_datasets(Segment)

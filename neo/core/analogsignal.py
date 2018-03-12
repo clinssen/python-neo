@@ -2,8 +2,10 @@
 '''
 This module implements :class:`AnalogSignal`, an array of analog signals.
 
-:class:`AnalogSignal` inherits from :class:`quantites.Quantity`, which
-inherits from :class:`numpy.array`.
+:class:`AnalogSignal` inherits from :class:`basesignal.BaseSignal` which 
+derives from :class:`BaseNeo`, and from :class:`quantites.Quantity`which 
+in turn inherits from :class:`numpy.array`.
+
 Inheritance from :class:`numpy.array` is explained here:
 http://docs.scipy.org/doc/numpy/user/basics.subclassing.html
 
@@ -24,9 +26,13 @@ import logging
 import numpy as np
 import quantities as pq
 
-from neo.core.baseneo import BaseNeo, merge_annotations
+from neo.core.baseneo import BaseNeo, MergeError, merge_annotations
+from neo.core.channelindex import ChannelIndex
+from copy import copy, deepcopy
 
 logger = logging.getLogger("Neo")
+
+from neo.core.basesignal import BaseSignal
 
 
 def _get_sampling_rate(sampling_rate, sampling_period):
@@ -48,24 +54,27 @@ def _get_sampling_rate(sampling_rate, sampling_period):
 
 
 def _new_AnalogSignalArray(cls, signal, units=None, dtype=None, copy=True,
-                          t_start=0*pq.s, sampling_rate=None,
-                          sampling_period=None, name=None, file_origin=None,
-                          description=None,
-                          annotations=None):
+                           t_start=0 * pq.s, sampling_rate=None,
+                           sampling_period=None, name=None, file_origin=None,
+                           description=None, annotations=None,
+                           channel_index=None, segment=None):
     '''
     A function to map AnalogSignal.__new__ to function that
         does not do the unit checking. This is needed for pickle to work.
     '''
-    return cls(signal=signal, units=units, dtype=dtype, copy=copy,
-               t_start=t_start, sampling_rate=sampling_rate,
-               sampling_period=sampling_period, name=name,
-               file_origin=file_origin, description=description,
-               **annotations)
+    obj = cls(signal=signal, units=units, dtype=dtype, copy=copy,
+              t_start=t_start, sampling_rate=sampling_rate,
+              sampling_period=sampling_period, name=name,
+              file_origin=file_origin, description=description,
+              **annotations)
+    obj.channel_index = channel_index
+    obj.segment = segment
+    return obj
 
 
-class AnalogSignal(BaseNeo, pq.Quantity):
+class AnalogSignal(BaseSignal):
     '''
-    Array of one or more continuous analog signals
+    Array of one or more continuous analog signals.
 
     A representation of several continuous, analog signals that
     have the same duration, sampling rate and start time.
@@ -98,7 +107,7 @@ class AnalogSignal(BaseNeo, pq.Quantity):
         :units: (quantity units) Required if the signal is a list or NumPy
                 array, not if it is a :class:`Quantity`
         :t_start: (quantity scalar) Time when signal begins
-        :sampling_rate: *or* :sampling_period: (quantity scalar) Number of
+        :sampling_rate: *or* **sampling_period** (quantity scalar) Number of
                                                samples per unit time or
                                                interval between two samples.
                                                If both are specified, they are
@@ -114,7 +123,7 @@ class AnalogSignal(BaseNeo, pq.Quantity):
         :copy: (bool) True by default.
 
     Note: Any other additional arguments are assumed to be user-specific
-            metadata and stored in :attr:`annotations`.
+    metadata and stored in :attr:`annotations`.
 
     *Properties available on this object*:
         :sampling_rate: (quantity scalar) Number of samples per unit time.
@@ -129,24 +138,26 @@ class AnalogSignal(BaseNeo, pq.Quantity):
             read-only.
             (:attr:`t_start` + arange(:attr:`shape`[0])/:attr:`sampling_rate`)
         :channel_index:
-            access to the channel_index attribute of the principal RecordingChannelGroup
+            access to the channel_index attribute of the principal ChannelIndex
             associated with this signal.
 
     *Slicing*:
         :class:`AnalogSignal` objects can be sliced. When taking a single
-        row (dimension 1, e.g. [:, 0]), a :class:`AnalogSignal` is returned.
-        When taking a single element, a :class:`~quantities.Quantity` is
-        returned.  Otherwise a :class:`AnalogSignal` (actually a view) is
+        column (dimension 0, e.g. [0, :]) or a single element,
+        a :class:`~quantities.Quantity` is returned.
+        Otherwise an :class:`AnalogSignal` (actually a view) is
         returned, with the same metadata, except that :attr:`t_start`
         is changed if the start index along dimension 1 is greater than 1.
-        Getting a single item returns a :class:`~quantity.Quantity` scalar.
+        Note that slicing an :class:`AnalogSignal` may give a different
+        result to slicing the underlying NumPy array since signals
+        are always two-dimensional.
 
     *Operations available on this object*:
         == != + * /
 
     '''
 
-    _single_parent_objects = ('Segment', 'RecordingChannelGroup')
+    _single_parent_objects = ('Segment', 'ChannelIndex')
     _quantity_attr = 'signal'
     _necessary_attrs = (('signal', pq.Quantity, 2),
                         ('sampling_rate', pq.Quantity, 0),
@@ -165,14 +176,7 @@ class AnalogSignal(BaseNeo, pq.Quantity):
 
         __array_finalize__ is called on the new object.
         '''
-        if units is None:
-            if not hasattr(signal, "units"):
-                raise ValueError("Units must be specified")
-        elif isinstance(signal, pq.Quantity):
-            # could improve this test, what if units is a string?
-            if units != signal.units:
-                signal = signal.rescale(units)
-
+        signal = cls._rescale(signal, units=units)
         obj = pq.Quantity(signal, units=units, dtype=dtype, copy=copy).view(cls)
 
         if obj.ndim == 1:
@@ -185,7 +189,7 @@ class AnalogSignal(BaseNeo, pq.Quantity):
         obj._sampling_rate = _get_sampling_rate(sampling_rate, sampling_period)
 
         obj.segment = None
-        obj.recordingchannelgroup = None
+        obj.channel_index = None
         return obj
 
     def __init__(self, signal, units=None, dtype=None, copy=True,
@@ -221,30 +225,37 @@ class AnalogSignal(BaseNeo, pq.Quantity):
                                         self.name,
                                         self.file_origin,
                                         self.description,
-                                        self.annotations)
+                                        self.annotations,
+                                        self.channel_index,
+                                        self.segment)
 
-    def __array_finalize__(self, obj):
+    def _array_finalize_spec(self, obj):
         '''
-        This is called every time a new :class:`AnalogSignal` is created.
+        Set default values for attributes specific to :class:`AnalogSignal`.
 
-        It is the appropriate place to set default values for attributes
-        for :class:`AnalogSignal` constructed by slicing or viewing.
-
-        User-specified values are only relevant for construction from
-        constructor, and these are set in __new__. Then they are just
-        copied over here.
+        Common attributes are defined in
+        :meth:`__array_finalize__` in :class:`basesignal.BaseSignal`),
+        which is called every time a new signal is created
+        and calls this method.
         '''
-        super(AnalogSignal, self).__array_finalize__(obj)
         self._t_start = getattr(obj, '_t_start', 0 * pq.s)
         self._sampling_rate = getattr(obj, '_sampling_rate', None)
+        return obj
 
-        # The additional arguments
-        self.annotations = getattr(obj, 'annotations', None)
-
-        # Globally recommended attributes
-        self.name = getattr(obj, 'name', None)
-        self.file_origin = getattr(obj, 'file_origin', None)
-        self.description = getattr(obj, 'description', None)
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        new_signal = cls(np.array(self), units=self.units, dtype=self.dtype,
+                         t_start=self.t_start, sampling_rate=self.sampling_rate,
+                         sampling_period=self.sampling_period, name=self.name,
+                         file_origin=self.file_origin, description=self.description)
+        new_signal.__dict__.update(self.__dict__)
+        memo[id(self)] = new_signal
+        for k, v in self.__dict__.items():
+            try:
+                setattr(new_signal, k, deepcopy(v, memo))
+            except TypeError:
+                setattr(new_signal, k, v)
+        return new_signal
 
     def __repr__(self):
         '''
@@ -255,39 +266,24 @@ class AnalogSignal(BaseNeo, pq.Quantity):
                  super(AnalogSignal, self).__repr__(), self.t_start,
                  self.t_stop, self.sampling_rate))
 
-    @property
-    def channel_index(self):
+    def get_channel_index(self):
         """
         """
-        if self.recordingchannelgroup:
-            return self.recordingchannelgroup.channel_indexes
+        if self.channel_index:
+            return self.channel_index.index
         else:
             return None
-
-    @property
-    def channel_indexes(self):
-        """
-        """
-        return self.channel_index
-
-    def __getslice__(self, i, j):
-        '''
-        Get a slice from :attr:`i` to :attr:`j`.
-
-        Doesn't get called in Python 3, :meth:`__getitem__` is called instead
-        '''
-        return self.__getitem__(slice(i, j))
 
     def __getitem__(self, i):
         '''
         Get the item or slice :attr:`i`.
         '''
         obj = super(AnalogSignal, self).__getitem__(i)
-        if isinstance(i, int):  # a single point in time across all channels
+        if isinstance(i, (int, np.integer)):  # a single point in time across all channels
             obj = pq.Quantity(obj.magnitude, units=obj.units)
         elif isinstance(i, tuple):
             j, k = i
-            if isinstance(j, int):  # extract a quantity array
+            if isinstance(j, (int, np.integer)):  # extract a quantity array
                 obj = pq.Quantity(obj.magnitude, units=obj.units)
             else:
                 if isinstance(j, slice):
@@ -301,14 +297,30 @@ class AnalogSignal(BaseNeo, pq.Quantity):
                     # in the general case, would need to return IrregularlySampledSignal(Array)
                 else:
                     raise TypeError("%s not supported" % type(j))
-                if isinstance(k, int):
+                if isinstance(k, (int, np.integer)):
                     obj = obj.reshape(-1, 1)
+                if self.channel_index:
+                    obj.channel_index = self.channel_index.__getitem__(k)
         elif isinstance(i, slice):
             if i.start:
                 obj.t_start = self.t_start + i.start * self.sampling_period
         else:
             raise IndexError("index should be an integer, tuple or slice")
         return obj
+
+    def __setitem__(self, i, value):
+        """
+        Set an item or slice defined by :attr:`i` to `value`.
+        """
+        # because AnalogSignals are always at least two-dimensional,
+        # we need to handle the case where `i` is an integer
+        if isinstance(i, int):
+            i = slice(i, i + 1)
+        elif isinstance(i, tuple):
+            j, k = i
+            if isinstance(k, int):
+                i = (j, slice(k, k + 1))
+        return super(AnalogSignal, self).__setitem__(i, value)
 
     # sampling_rate attribute is handled as a property so type checking can
     # be done
@@ -397,43 +409,6 @@ class AnalogSignal(BaseNeo, pq.Quantity):
         '''
         return self.t_start + np.arange(self.shape[0]) / self.sampling_rate
 
-    def rescale(self, units):
-        '''
-        Return a copy of the AnalogSignal converted to the specified
-        units
-        '''
-        to_dims = pq.quantity.validate_dimensionality(units)
-        if self.dimensionality == to_dims:
-            to_u = self.units
-            signal = np.array(self)
-        else:
-            to_u = pq.Quantity(1.0, to_dims)
-            from_u = pq.Quantity(1.0, self.dimensionality)
-            try:
-                cf = pq.quantity.get_conversion_factor(from_u, to_u)
-            except AssertionError:
-                raise ValueError('Unable to convert between units of "%s" \
-                                 and "%s"' % (from_u._dimensionality,
-                                              to_u._dimensionality))
-            signal = cf * self.magnitude
-        new = self.__class__(signal=signal, units=to_u,
-                             sampling_rate=self.sampling_rate)
-        new._copy_data_complement(self)
-        new.annotations.update(self.annotations)
-        return new
-
-    def duplicate_with_new_array(self, signal):
-        '''
-        Create a new :class:`AnalogSignal` with the same metadata
-        but different data
-        '''
-        #signal is the new signal
-        new = self.__class__(signal=signal, units=self.units,
-                             sampling_rate=self.sampling_rate)
-        new._copy_data_complement(self)
-        new.annotations.update(self.annotations)
-        return new
-
     def __eq__(self, other):
         '''
         Equality test (==)
@@ -442,12 +417,6 @@ class AnalogSignal(BaseNeo, pq.Quantity):
                 self.sampling_rate != other.sampling_rate):
             return False
         return super(AnalogSignal, self).__eq__(other)
-
-    def __ne__(self, other):
-        '''
-        Non-equality test (!=)
-        '''
-        return not self.__eq__(other)
 
     def _check_consistency(self, other):
         '''
@@ -459,64 +428,6 @@ class AnalogSignal(BaseNeo, pq.Quantity):
                 if getattr(self, attr) != getattr(other, attr):
                     raise ValueError("Inconsistent values of %s" % attr)
             # how to handle name and annotations?
-
-    def _copy_data_complement(self, other):
-        '''
-        Copy the metadata from another :class:`AnalogSignal`.
-        '''
-        for attr in ("t_start", "sampling_rate", "name", "file_origin",
-                     "description", "annotations"):
-            setattr(self, attr, getattr(other, attr, None))
-
-    def _apply_operator(self, other, op, *args):
-        '''
-        Handle copying metadata to the new :class:`AnalogSignal`
-        after a mathematical operation.
-        '''
-        self._check_consistency(other)
-        f = getattr(super(AnalogSignal, self), op)
-        new_signal = f(other, *args)
-        new_signal._copy_data_complement(self)
-        return new_signal
-
-    def __add__(self, other, *args):
-        '''
-        Addition (+)
-        '''
-        return self._apply_operator(other, "__add__", *args)
-
-    def __sub__(self, other, *args):
-        '''
-        Subtraction (-)
-        '''
-        return self._apply_operator(other, "__sub__", *args)
-
-    def __mul__(self, other, *args):
-        '''
-        Multiplication (*)
-        '''
-        return self._apply_operator(other, "__mul__", *args)
-
-    def __truediv__(self, other, *args):
-        '''
-        Float division (/)
-        '''
-        return self._apply_operator(other, "__truediv__", *args)
-
-    def __div__(self, other, *args):
-        '''
-        Integer division (//)
-        '''
-        return self._apply_operator(other, "__div__", *args)
-
-    __radd__ = __add__
-    __rmul__ = __sub__
-
-    def __rsub__(self, other, *args):
-        '''
-        Backwards subtraction (other-self)
-        '''
-        return self.__mul__(-1, *args) + other
 
     def _repr_pretty_(self, pp, cycle):
         '''
@@ -542,6 +453,12 @@ class AnalogSignal(BaseNeo, pq.Quantity):
                      ]:
             _pp(line)
 
+    def time_index(self, t):
+        """Return the array index corresponding to the time `t`"""
+        t = t.rescale(self.sampling_period.units)
+        i = (t - self.t_start) / self.sampling_period
+        i = int(np.rint(i.magnitude))
+        return i
 
     def time_slice(self, t_start, t_stop):
         '''
@@ -553,20 +470,16 @@ class AnalogSignal(BaseNeo, pq.Quantity):
         '''
 
         # checking start time and transforming to start index
-        if t_start == None:
+        if t_start is None:
             i = 0
         else:
-            t_start = t_start.rescale(self.sampling_period.units)
-            i = (t_start - self.t_start) / self.sampling_period
-            i = int(np.rint(i.magnitude))
+            i = self.time_index(t_start)
 
         # checking stop time and transforming to stop index
-        if t_stop == None:
+        if t_stop is None:
             j = len(self)
         else:
-            t_stop = t_stop.rescale(self.sampling_period.units)
-            j = (t_stop - self.t_start) / self.sampling_period
-            j = int(np.rint(j.magnitude))
+            j = self.time_index(t_stop)
 
         if (i < 0) or (j > len(self)):
             raise ValueError('t_start, t_stop have to be withing the analog \
@@ -579,33 +492,35 @@ class AnalogSignal(BaseNeo, pq.Quantity):
 
         return obj
 
-    def merge(self, other):
-        '''
-        Merge the another :class:`AnalogSignal` into this one.
+    def splice(self, signal, copy=False):
+        """
+        Replace part of the current signal by a new piece of signal.
 
-        The :class:`AnalogSignal` objects are concatenated horizontally
-        (column-wise, :func:`np.hstack`).
+        The new piece of signal will overwrite part of the current signal
+        starting at the time given by the new piece's `t_start` attribute.
 
-        If the attributes of the two :class:`AnalogSignal` are not
-        compatible, and Exception is raised.
-        '''
-        assert self.sampling_rate == other.sampling_rate
-        assert self.t_start == other.t_start
-        if other.units != self.units:
-            other = other.rescale(self.units)
-        stack = np.hstack(map(np.array, (self, other)))
-        kwargs = {}
-        for name in ("name", "description", "file_origin"):
-            attr_self = getattr(self, name)
-            attr_other = getattr(other, name)
-            if attr_self == attr_other:
-                kwargs[name] = attr_self
-            else:
-                kwargs[name] = "merge(%s, %s)" % (attr_self, attr_other)
-        merged_annotations = merge_annotations(self.annotations,
-                                               other.annotations)
-        kwargs.update(merged_annotations)
-        return AnalogSignal(stack, units=self.units, dtype=self.dtype,
-                                 copy=False, t_start=self.t_start,
-                                 sampling_rate=self.sampling_rate,
-                                 **kwargs)
+        The signal to be spliced in must have the same physical dimensions,
+        sampling rate, and number of channels as the current signal and
+        fit within it.
+
+        If `copy` is False (the default), modify the current signal in place.
+        If `copy` is True, return a new signal and leave the current one untouched.
+        In this case, the new signal will not be linked to any parent objects.        
+        """
+        if signal.t_start < self.t_start:
+            raise ValueError("Cannot splice earlier than the start of the signal")
+        if signal.t_stop > self.t_stop:
+            raise ValueError("Splice extends beyond signal")
+        if signal.sampling_rate != self.sampling_rate:
+            raise ValueError("Sampling rates do not match")
+        i = self.time_index(signal.t_start)
+        j = i + signal.shape[0]
+        if copy:
+            new_signal = deepcopy(self)
+            new_signal.segment = None
+            new_signal.channel_index = None
+            new_signal[i:j, :] = signal
+            return new_signal
+        else:
+            self[i:j, :] = signal
+            return self

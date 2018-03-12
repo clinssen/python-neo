@@ -35,6 +35,10 @@ except NameError:
 logger = logging.getLogger("Neo")
 
 
+class MergeError(Exception):
+    pass
+
+
 def _check_annotations(value):
     """
     Recursively check that value is either of a "simple" type (number, string,
@@ -125,7 +129,10 @@ def _reference_name(class_name):
     `segment.block`. The attribute name `block` is obtained by calling
     `_container_name("Block")`.
     """
-    return class_name.lower()
+    name_map = {
+        "ChannelIndex": "channel_index"
+    }
+    return name_map.get(class_name, class_name.lower())
 
 
 def _container_name(class_name):
@@ -137,7 +144,10 @@ def _container_name(class_name):
     referenced by `block.segments`. The attribute name `segments` is
     obtained by calling `_container_name_plural("Segment")`.
     """
-    return _reference_name(class_name) + 's'
+    name_map = {
+        "ChannelIndex": "channel_indexes"
+    }
+    return name_map.get(class_name, _reference_name(class_name) + 's')
 
 
 class BaseNeo(object):
