@@ -82,6 +82,7 @@ class AnalogSignalProxy(BaseProxy):
         self.units = ensure_signal_units(sig_chans['units'][0])
         self.dtype = sig_chans['dtype'][0]
         self.sampling_rate = sig_chans['sampling_rate'][0] * pq.Hz
+        self.sampling_period = 1/self.sampling_rate
         sigs_size = self._rawio.get_signal_size(block_index=block_index, seg_index=seg_index,
                                         channel_indexes=self._global_channel_indexes)
         self.shape = (sigs_size, self._nb_chan)
@@ -92,7 +93,7 @@ class AnalogSignalProxy(BaseProxy):
         # and all gain are the same
         support_raw_magnitude = np.all(sig_chans['gain']==sig_chans['gain'][0]) and \
                                                     np.all(sig_chans['offset']==0.)
-        
+
         if support_raw_magnitude:
             str_units = ensure_signal_units(sig_chans['units'][0]).units.dimensionality.string
             self._raw_units = pq.CompoundUnit('{}*{}'.format(sig_chans['gain'][0], str_units))
@@ -172,8 +173,8 @@ class AnalogSignalProxy(BaseProxy):
                 i_start = int(np.ceil((t_start-self.t_start).magnitude * sr.magnitude))
                 #this needed to get the real t_start of the first sample
                 #because do not necessary match what is demanded
-                sig_t_start = self.t_start + i_start/sr 
-                
+                sig_t_start = self.t_start + i_start/sr
+
             if t_stop is None:
                 i_stop = None
             else:
@@ -243,7 +244,7 @@ class SpikeTrainProxy(BaseProxy):
     _quantity_attr = 'times'
     _necessary_attrs = (('t_start', pq.Quantity, 0),
                                     ('t_stop', pq.Quantity, 0))
-    _recommended_attrs = ()    
+    _recommended_attrs = ()
 
     def __init__(self, rawio=None, unit_index=None, block_index=0, seg_index=0):
 
@@ -252,7 +253,7 @@ class SpikeTrainProxy(BaseProxy):
         self._seg_index = seg_index
         self._unit_index = unit_index
 
-        nb_spike = self._rawio.spike_count(block_index=block_index, seg_index=seg_index, 
+        nb_spike = self._rawio.spike_count(block_index=block_index, seg_index=seg_index,
                                         unit_index=unit_index)
         self.shape = (nb_spike, )
 
@@ -277,7 +278,7 @@ class SpikeTrainProxy(BaseProxy):
             self.left_sweep = None
 
         BaseProxy.__init__(self, **kargs)
-    
+
     def load(self, time_slice=None, magnitude_mode='rescaled', load_waveforms=False):
         '''
         *Args*:
@@ -286,15 +287,15 @@ class SpikeTrainProxy(BaseProxy):
             :magnitude_mode: 'rescaled' or 'raw'.
             :load_waveforms: bool load waveforms or not.
         '''
-        
+
         t_start, t_stop = consolidate_time_slice(time_slice, self.t_start, self.t_stop)
         _t_start = t_start.rescale('s').magnitude
         _t_stop = t_stop.rescale('s').magnitude
 
-        spike_timestamps = self._rawio.get_spike_timestamps(block_index=self._block_index, 
+        spike_timestamps = self._rawio.get_spike_timestamps(block_index=self._block_index,
                         seg_index=self._seg_index, unit_index=self._unit_index, t_start=_t_start,
                         t_stop=_t_stop)
-        
+
         if magnitude_mode == 'raw':
             #we must modify a bit the neo.rawio interface to also read the spike_timestamps
             #underlying clock wich is not always same as sigs
@@ -303,10 +304,10 @@ class SpikeTrainProxy(BaseProxy):
             dtype = 'float64'
             spike_times = self._rawio.rescale_spike_timestamp(spike_timestamps, dtype=dtype)
             units = 's'
-        
+
         if load_waveforms:
             assert self.sampling_rate is not None, 'Do not have waveforms'
-            
+
             raw_wfs = self._rawio.get_spike_raw_waveforms(block_index=self._block_index,
                 seg_index=self._seg_index, unit_index=self._unit_index,
                             t_start=_t_start, t_stop=_t_stop)
@@ -318,14 +319,14 @@ class SpikeTrainProxy(BaseProxy):
             elif magnitude_mode=='raw':
                 #could code also CompundUnit here but it is over killed
                 #so we used dimentionless
-                waveforms = pq.Quantity(raw_wfs, units='', 
+                waveforms = pq.Quantity(raw_wfs, units='',
                             dtype=raw_wfs.dtype, copy=False)
         else:
             waveforms = None
 
         sptr = SpikeTrain(spike_times, t_stop, units=units, dtype=dtype,
                 t_start=t_start, copy=False, sampling_rate=self.sampling_rate,
-                waveforms=waveforms, left_sweep=self.left_sweep, name=self.name, 
+                waveforms=waveforms, left_sweep=self.left_sweep, name=self.name,
                 file_origin=self.file_origin, description=self.description, **self.annotations)
 
         return sptr
@@ -336,16 +337,16 @@ class _EventOrEpoch(BaseProxy):
     _quantity_attr = 'times'
 
     def __init__(self, rawio=None, event_channel_index=None, block_index=0, seg_index=0):
-        
+
         self._rawio = rawio
         self._block_index = block_index
         self._seg_index = seg_index
         self._event_channel_index = event_channel_index
-        
-        nb_event = self._rawio.event_count(block_index=block_index, seg_index=seg_index, 
+
+        nb_event = self._rawio.event_count(block_index=block_index, seg_index=seg_index,
                                         event_channel_index=event_channel_index)
         self.shape = (nb_event, )
-        
+
         self.t_start = self._rawio.segment_t_start(block_index, seg_index) * pq.s
         self.t_stop = self._rawio.segment_t_stop(block_index, seg_index) * pq.s
 
@@ -364,13 +365,13 @@ class _EventOrEpoch(BaseProxy):
             :time_slice: None or tuple of the time slice expressed with quantities.
                             None is the entire signal.
         '''
-        
+
         t_start, t_stop = consolidate_time_slice(time_slice, self.t_start, self.t_stop)
         _t_start = t_start.rescale('s').magnitude
         _t_stop = t_stop.rescale('s').magnitude
 
-        timestamp, durations, labels = self._rawio.get_event_timestamps(block_index=self._block_index, 
-                        seg_index=self._seg_index, event_channel_index=self._event_channel_index, 
+        timestamp, durations, labels = self._rawio.get_event_timestamps(block_index=self._block_index,
+                        seg_index=self._seg_index, event_channel_index=self._event_channel_index,
                         t_start=_t_start, t_stop=_t_stop)
 
         dtype = 'float64'
@@ -385,7 +386,7 @@ class _EventOrEpoch(BaseProxy):
 
         h = self._rawio.header['event_channels'][self._event_channel_index]
         if h['type'] == b'event':
-            ret = Event(times=times, labels=labels, units='s', copy=False, 
+            ret = Event(times=times, labels=labels, units='s', copy=False,
                 name=self.name,  file_origin=self.file_origin,
                 description=self.description, **self.annotations)
         elif h['type'] == b'epoch':
@@ -446,13 +447,13 @@ class EpochProxy(_EventOrEpoch):
     >>> epoch = proxy_epoch.load()
     >>> slice_of_epoch = proxy_epoch.load(time_slice=(1.*pq.s, 2.*pq.s))
 
-    '''    
+    '''
     _necessary_attrs = (('times', pq.Quantity, 1),
                         ('durations', pq.Quantity, 1),
                         ('labels', np.ndarray, 1, np.dtype('S')))
 
 
-proxyobjectlist = [AnalogSignalProxy, SpikeTrainProxy, EventProxy, 
+proxyobjectlist = [AnalogSignalProxy, SpikeTrainProxy, EventProxy,
                             EpochProxy]
 
 
